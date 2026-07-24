@@ -25,7 +25,7 @@ export class GameScene extends Phaser.Scene {
   private chiSprite!: Phaser.GameObjects.Image;
   private chiMoving = false;
   private chiCounter = 0;
-  private ownerRegistry = new OwnerRegistry();
+  private ownerRegistry!: OwnerRegistry;
   private held: Record<Direction, boolean> = { up: false, down: false, left: false, right: false };
   private moving = false;
   private acc = 0;
@@ -42,6 +42,25 @@ export class GameScene extends Phaser.Scene {
   constructor() { super('Game'); }
 
   create() {
+    // Reset ALL per-run state up front. Phaser's scene.start() re-runs create()
+    // but does NOT reset class fields to their declared initial values, so every
+    // mutable field touched during a run must be explicitly reassigned here.
+    this.ownerRegistry = new OwnerRegistry();
+    this.held = { up: false, down: false, left: false, right: false };
+    this.moving = false;
+    this.chiMoving = false;
+    this.chiCounter = 0;
+    this.acc = 0;
+    this.action = null;
+    this.foods = [];
+    this.foodSprites = new Map();
+    this.secondsLeft = GAME_SECONDS;
+    this.tickInSecond = 0;
+    this.over = false;
+    this.badges = [];
+    this.badgeTickCounter = 0;
+    this.tileSprites = [];
+
     this.map = parseMap(mapCsv);
     this.grid = new Grid(this.map);
     this.renderMap();
