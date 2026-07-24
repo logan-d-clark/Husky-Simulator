@@ -52,6 +52,19 @@ export class GameScene extends Phaser.Scene {
     this.chiSprite = this.add.image(cp.x, cp.y, 'chi-right-0').setDepth(9);
 
     this.bindInput();
+
+    this.scene.launch('UI');
+  }
+
+  getHudState() {
+    const t = this.currentTile();
+    return {
+      food: this.husky.inv.food, water: this.husky.inv.water,
+      poop: this.husky.inv.poop, pee: this.husky.inv.pee,
+      secondsLeft: this.secondsLeft,
+      huskyTreats: this.husky.treatsEaten, chiTreats: this.chihuahua.treatsEaten,
+      currentTile: { heat: t.heat, dirt: t.dirt, destruction: t.destruction, ownerId: t.ownerId },
+    };
   }
 
   private bindInput() {
