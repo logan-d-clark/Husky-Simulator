@@ -2,13 +2,27 @@ import Phaser from 'phaser';
 import mapCsv from '../data/map.csv?raw';
 import { parseMap, type GameMap } from '../world/MapParser';
 import { Grid } from '../world/Grid';
-import { GRID } from '../config/constants';
+import { GRID, SIM_HZ } from '../config/constants';
 import type { Tile } from '../world/tiles';
+import { Husky } from '../entities/Husky';
+import { ResourceSystem } from '../systems/ResourceSystem';
+import { WorldActions } from '../systems/WorldActions';
+import { OwnerRegistry } from '../systems/OwnerRegistry';
+import type { Direction } from '../types';
 
 export class GameScene extends Phaser.Scene {
   private map!: GameMap;
   grid!: Grid;
   private tileSprites: Phaser.GameObjects.Image[][] = [];
+
+  husky!: Husky;
+  private huskySprite!: Phaser.GameObjects.Image;
+  private ownerRegistry = new OwnerRegistry();
+  private held: Record<Direction, boolean> = { up: false, down: false, left: false, right: false };
+  private moving = false;
+  private acc = 0;
+  private readonly step = 1000 / SIM_HZ;
+  private action: 'drink' | 'poop' | 'pee' | 'trick' | null = null;
 
   constructor() { super('Game'); }
 
@@ -16,6 +30,76 @@ export class GameScene extends Phaser.Scene {
     this.map = parseMap(mapCsv);
     this.grid = new Grid(this.map);
     this.renderMap();
+
+    this.husky = new Husky();
+    const p = this.grid.tileToPixel(this.husky.tile);
+    this.huskySprite = this.add.image(p.x, p.y, 'husky-left-0').setDepth(10);
+    this.bindInput();
+  }
+
+  private bindInput() {
+    const kb = this.input.keyboard!;
+    const map: Record<string, Direction> = { W: 'up', S: 'down', A: 'left', D: 'right' };
+    for (const [k, dir] of Object.entries(map)) {
+      kb.addKey(k).on('down', () => { this.held[dir] = true; this.husky.facing = dir; });
+      kb.addKey(k).on('up', () => { this.held[dir] = false; });
+    }
+    kb.addKey('Q').on('down', () => { this.action = 'drink'; });
+    kb.addKey('Q').on('up', () => { if (this.action === 'drink') this.action = null; });
+    kb.addKey('C').on('down', () => { this.action = 'poop'; });
+    kb.addKey('Z').on('down', () => { this.action = 'pee'; });
+    kb.addKey('E').on('down', () => { this.action = 'trick'; });
+    for (const k of ['C', 'Z', 'E']) kb.addKey(k).on('up', () => { this.action = null; });
+  }
+
+  update(_t: number, delta: number) {
+    this.acc += delta;
+    while (this.acc >= this.step) { this.acc -= this.step; this.simTick(); }
+  }
+
+  private currentTile() { return this.map.tiles[this.husky.tile.row][this.husky.tile.col]; }
+
+  private simTick() {
+    // 1) movement
+    const dir = (['up', 'down', 'left', 'right'] as Direction[]).find((d) => this.held[d]);
+    if (dir && !this.moving && this.grid.canMove(this.husky.tile, dir)) {
+      const to = this.grid.neighbor(this.husky.tile, dir);
+      this.husky.tile = to;
+      ResourceSystem.applyMoveCost(this.husky.inv);
+      this.moving = true;
+      const p = this.grid.tileToPixel(to);
+      this.tweens.add({
+        targets: this.huskySprite, x: p.x, y: p.y, duration: this.step,
+        onComplete: () => { this.moving = false; this.onEnterTile(); },
+      });
+    }
+    this.huskySprite.setTexture(`husky-${this.husky.facing}-${Math.floor(performance.now() / 120) % 2}`);
+
+    // 2) heat every tick (even standing)
+    ResourceSystem.applyHeat(this.husky.inv, this.currentTile().heat);
+
+    // 3) standing actions
+    const tile = this.currentTile();
+    const owner = this.ownerRegistry.get(tile.ownerId);
+    if (this.action === 'poop') WorldActions.poop(this.husky, tile, owner);
+    else if (this.action === 'pee') WorldActions.pee(this.husky, tile, owner);
+    else if (this.action === 'trick') WorldActions.trick(this.husky, tile, owner);
+    else if (this.action === 'drink' && this.nearWater()) ResourceSystem.drink(this.husky.inv);
+  }
+
+  private onEnterTile() {
+    const tile = this.currentTile();
+    WorldActions.autoDump(this.husky, tile, this.ownerRegistry.get(tile.ownerId));
+    // food pickup handled in Task 20
+  }
+
+  private nearWater(): boolean {
+    const { col, row } = this.husky.tile;
+    for (const [dc, dr] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const t = this.grid.tileAt(col + dc, row + dr);
+      if (t && t.type === 'water') return true;
+    }
+    return false;
   }
 
   private renderMap() {
