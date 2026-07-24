@@ -10,6 +10,7 @@ import { ResourceSystem } from '../systems/ResourceSystem';
 import { WorldActions } from '../systems/WorldActions';
 import { AISystem } from '../systems/AISystem';
 import { OwnerRegistry, dispenseOverMap } from '../systems/OwnerRegistry';
+import { createBadges, updateBadges, type Badge } from '../ui/HouseholdProfile';
 import type { Direction } from '../types';
 import type { Food } from '../entities/Food';
 
@@ -35,6 +36,8 @@ export class GameScene extends Phaser.Scene {
   private secondsLeft = GAME_SECONDS;
   private tickInSecond = 0;
   private over = false;
+  private badges: Badge[] = [];
+  private badgeTickCounter = 0;
 
   constructor() { super('Game'); }
 
@@ -53,6 +56,8 @@ export class GameScene extends Phaser.Scene {
 
     this.bindInput();
 
+    this.badges = createBadges(this, this.map, this.ownerRegistry, this.grid);
+
     this.scene.launch('UI');
   }
 
@@ -65,6 +70,11 @@ export class GameScene extends Phaser.Scene {
       huskyTreats: this.husky.treatsEaten, chiTreats: this.chihuahua.treatsEaten,
       currentTile: { heat: t.heat, dirt: t.dirt, destruction: t.destruction, ownerId: t.ownerId },
     };
+  }
+
+  getOwnerInfo(id: number) {
+    const o = this.ownerRegistry.get(id);
+    return { name: o.name, sensitivity: o.sensitivity, affection: o.affection };
   }
 
   private bindInput() {
@@ -119,6 +129,9 @@ export class GameScene extends Phaser.Scene {
     else if (this.action === 'drink' && this.nearWater()) ResourceSystem.drink(this.husky.inv);
 
     if (tile.type === 'grass') this.tileSprites[tile.row][tile.col].setTint(this.grassColor(tile));
+
+    this.badgeTickCounter = (this.badgeTickCounter + 1) % 5;
+    if (this.badgeTickCounter === 0) updateBadges(this.badges, this.ownerRegistry);
 
     // 4) food dispensing
     dispenseOverMap(this.map, this.ownerRegistry, Math.random, (food) => {

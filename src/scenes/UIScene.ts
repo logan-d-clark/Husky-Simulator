@@ -20,6 +20,7 @@ export class UIScene extends Phaser.Scene {
     mk('timer', 16, y0 + 10); mk('foodL', 120, y0 + 10); mk('waterL', 120, y0 + 34);
     mk('poopL', 120, y0 + 58); mk('peeL', 120, y0 + 82);
     mk('space', 16, y0 + 40); mk('score', 16, y0 + 100);
+    mk('profile', 16, y0 + 118);
   }
 
   update() {
@@ -46,5 +47,7 @@ export class UIScene extends Phaser.Scene {
     this.texts.timer.setText(`⏰ ${mm}:${ss.toString().padStart(2, '0')}`);
     this.texts.space.setText(`Heat ${s.currentTile.heat}  Poop ${s.currentTile.dirt}  Pee ${s.currentTile.destruction}`);
     this.texts.score.setText(`🐺 You ${s.huskyTreats}   🐕 Rival ${s.chiTreats}`);
+    const info = gs.getOwnerInfo(s.currentTile.ownerId);
+    this.texts.profile.setText(`${info.name}  •  tolerance ${info.sensitivity}  •  likes you ${info.affection.toFixed(0)}`);
   }
 }
