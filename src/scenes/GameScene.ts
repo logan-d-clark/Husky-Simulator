@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import mapCsv from '../data/map.csv?raw';
 import { parseMap, type GameMap } from '../world/MapParser';
 import { Grid } from '../world/Grid';
-import { GRID, SIM_HZ } from '../config/constants';
+import { GRID, SIM_HZ, GAME_SECONDS, TICKS_PER_SECOND } from '../config/constants';
 import type { Tile } from '../world/tiles';
 import { Husky } from '../entities/Husky';
 import { Chihuahua } from '../entities/Chihuahua';
@@ -32,6 +32,9 @@ export class GameScene extends Phaser.Scene {
   private action: 'drink' | 'poop' | 'pee' | 'trick' | null = null;
   private foods: Food[] = [];
   private foodSprites = new Map<string, Phaser.GameObjects.Image>();
+  private secondsLeft = GAME_SECONDS;
+  private tickInSecond = 0;
+  private over = false;
 
   constructor() { super('Game'); }
 
@@ -74,6 +77,8 @@ export class GameScene extends Phaser.Scene {
   private currentTile() { return this.map.tiles[this.husky.tile.row][this.husky.tile.col]; }
 
   private simTick() {
+    if (this.over) return;
+
     // 1) movement
     const dir = (['up', 'down', 'left', 'right'] as Direction[]).find((d) => this.held[d]);
     if (dir && !this.moving && this.grid.canMove(this.husky.tile, dir)) {
@@ -127,6 +132,25 @@ export class GameScene extends Phaser.Scene {
       }
     }
     this.chiSprite.setTexture(`chi-${this.chihuahua.facing}-${Math.floor(performance.now() / 160) % 2}`);
+
+    // 6) sim-time / game-over
+    this.tickInSecond = (this.tickInSecond + 1) % TICKS_PER_SECOND;
+    if (this.tickInSecond === 0) {
+      this.secondsLeft -= 1;
+      if (this.secondsLeft <= 0) { this.endGame('Time'); return; }
+    }
+    const go = ResourceSystem.isGameOver(this.husky.inv);
+    if (go) { this.endGame(go); return; }
+  }
+
+  private endGame(reason: 'Time' | 'Food' | 'Water') {
+    this.over = true;
+    this.scene.stop('UI');
+    this.scene.start('GameOver', {
+      reason,
+      huskyTreats: this.husky.treatsEaten,
+      chiTreats: this.chihuahua.treatsEaten,
+    });
   }
 
   private chiEat() {
