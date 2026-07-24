@@ -5,8 +5,10 @@ import { Grid } from '../world/Grid';
 import { GRID, SIM_HZ } from '../config/constants';
 import type { Tile } from '../world/tiles';
 import { Husky } from '../entities/Husky';
+import { Chihuahua } from '../entities/Chihuahua';
 import { ResourceSystem } from '../systems/ResourceSystem';
 import { WorldActions } from '../systems/WorldActions';
+import { AISystem } from '../systems/AISystem';
 import { OwnerRegistry, dispenseOverMap } from '../systems/OwnerRegistry';
 import type { Direction } from '../types';
 import type { Food } from '../entities/Food';
@@ -18,6 +20,10 @@ export class GameScene extends Phaser.Scene {
 
   husky!: Husky;
   private huskySprite!: Phaser.GameObjects.Image;
+  chihuahua!: Chihuahua;
+  private chiSprite!: Phaser.GameObjects.Image;
+  private chiMoving = false;
+  private chiCounter = 0;
   private ownerRegistry = new OwnerRegistry();
   private held: Record<Direction, boolean> = { up: false, down: false, left: false, right: false };
   private moving = false;
@@ -37,6 +43,11 @@ export class GameScene extends Phaser.Scene {
     this.husky = new Husky();
     const p = this.grid.tileToPixel(this.husky.tile);
     this.huskySprite = this.add.image(p.x, p.y, 'husky-left-0').setDepth(10);
+
+    this.chihuahua = new Chihuahua({ col: 2, row: 2 });
+    const cp = this.grid.tileToPixel(this.chihuahua.tile);
+    this.chiSprite = this.add.image(cp.x, cp.y, 'chi-right-0').setDepth(9);
+
     this.bindInput();
   }
 
@@ -89,6 +100,8 @@ export class GameScene extends Phaser.Scene {
     else if (this.action === 'trick') WorldActions.trick(this.husky, tile, owner);
     else if (this.action === 'drink' && this.nearWater()) ResourceSystem.drink(this.husky.inv);
 
+    if (tile.type === 'grass') this.tileSprites[tile.row][tile.col].setTint(this.grassColor(tile));
+
     // 4) food dispensing
     dispenseOverMap(this.map, this.ownerRegistry, Math.random, (food) => {
       this.foods.push(food);
@@ -96,6 +109,38 @@ export class GameScene extends Phaser.Scene {
       const spr = this.add.image(p.x, p.y, food.type).setDepth(8);
       this.foodSprites.set(this.fkey(food.tile.col, food.tile.row), spr);
     });
+
+    // 5) chihuahua AI (steps every 2nd sim tick)
+    this.chiCounter = (this.chiCounter + 1) % 2;
+    if (this.chiCounter === 0 && !this.chiMoving) {
+      const dir = AISystem.nextStep(this.grid, this.chihuahua.tile, this.foods);
+      if (dir) {
+        this.chihuahua.facing = dir;
+        const to = this.grid.neighbor(this.chihuahua.tile, dir);
+        this.chihuahua.tile = to;
+        this.chiMoving = true;
+        const cp = this.grid.tileToPixel(to);
+        this.tweens.add({
+          targets: this.chiSprite, x: cp.x, y: cp.y, duration: this.step * 2,
+          onComplete: () => { this.chiMoving = false; this.chiEat(); },
+        });
+      }
+    }
+    this.chiSprite.setTexture(`chi-${this.chihuahua.facing}-${Math.floor(performance.now() / 160) % 2}`);
+  }
+
+  private chiEat() {
+    const idx = this.foods.findIndex(
+      (f) => f.tile.col === this.chihuahua.tile.col && f.tile.row === this.chihuahua.tile.row,
+    );
+    if (idx !== -1) {
+      const food = this.foods.splice(idx, 1)[0];
+      this.chihuahua.treatsEaten += 1;
+      this.map.tiles[food.tile.row][food.tile.col].foodPresent = false;
+      const key = this.fkey(food.tile.col, food.tile.row);
+      this.foodSprites.get(key)?.destroy();
+      this.foodSprites.delete(key);
+    }
   }
 
   private fkey(c: number, r: number) { return `${c},${r}`; }
