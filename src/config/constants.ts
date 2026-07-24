@@ -5,6 +5,7 @@ export const WATER_RATE = 0.1;
 export const TREAT_VALUE = 10;
 export const WATER_VALUE = 10;
 export const WATER_MAX = 1000;
+export const WATER_CAP = WATER_MAX / 8; // matches V1 STATUS_BAR_SCALE cap (125)
 
 export const POOP_RATE = 1;
 export const PEE_RATE = 1;

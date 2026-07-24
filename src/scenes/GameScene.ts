@@ -12,7 +12,7 @@ import { AISystem } from '../systems/AISystem';
 import { OwnerRegistry, dispenseOverMap } from '../systems/OwnerRegistry';
 import { createBadges, updateBadges, type Badge } from '../ui/HouseholdProfile';
 import type { Direction } from '../types';
-import type { Food } from '../entities/Food';
+import { takeFoodAt, type Food } from '../entities/Food';
 
 export class GameScene extends Phaser.Scene {
   private map!: GameMap;
@@ -98,6 +98,7 @@ export class GameScene extends Phaser.Scene {
 
   private bindInput() {
     const kb = this.input.keyboard!;
+    kb.removeAllKeys(true);
     const map: Record<string, Direction> = { W: 'up', S: 'down', A: 'left', D: 'right' };
     for (const [k, dir] of Object.entries(map)) {
       kb.addKey(k).on('down', () => { this.held[dir] = true; this.husky.facing = dir; });
@@ -106,13 +107,15 @@ export class GameScene extends Phaser.Scene {
     kb.addKey('Q').on('down', () => { this.action = 'drink'; });
     kb.addKey('Q').on('up', () => { if (this.action === 'drink') this.action = null; });
     kb.addKey('C').on('down', () => { this.action = 'poop'; });
+    kb.addKey('C').on('up', () => { if (this.action === 'poop') this.action = null; });
     kb.addKey('Z').on('down', () => { this.action = 'pee'; });
+    kb.addKey('Z').on('up', () => { if (this.action === 'pee') this.action = null; });
     kb.addKey('E').on('down', () => { this.action = 'trick'; });
-    for (const k of ['C', 'Z', 'E']) kb.addKey(k).on('up', () => { this.action = null; });
+    kb.addKey('E').on('up', () => { if (this.action === 'trick') this.action = null; });
   }
 
   update(_t: number, delta: number) {
-    this.acc += delta;
+    this.acc += Math.min(delta, 250);
     while (this.acc >= this.step) { this.acc -= this.step; this.simTick(); }
   }
 
@@ -134,18 +137,28 @@ export class GameScene extends Phaser.Scene {
         onComplete: () => { this.moving = false; this.onEnterTile(); },
       });
     }
-    this.huskySprite.setTexture(`husky-${this.husky.facing}-${Math.floor(performance.now() / 120) % 2}`);
-
     // 2) heat every tick (even standing)
     ResourceSystem.applyHeat(this.husky.inv, this.currentTile().heat);
 
     // 3) standing actions
     const tile = this.currentTile();
     const owner = this.ownerRegistry.get(tile.ownerId);
-    if (this.action === 'poop') WorldActions.poop(this.husky, tile, owner);
-    else if (this.action === 'pee') WorldActions.pee(this.husky, tile, owner);
-    else if (this.action === 'trick') WorldActions.trick(this.husky, tile, owner);
-    else if (this.action === 'drink' && this.nearWater()) ResourceSystem.drink(this.husky.inv);
+    const poopApplied = this.action === 'poop' && WorldActions.poop(this.husky, tile, owner);
+    const peeApplied = this.action === 'pee' && WorldActions.pee(this.husky, tile, owner);
+    const trickApplied = this.action === 'trick' && WorldActions.trick(this.husky, tile, owner);
+    const drinkApplied = this.action === 'drink' && this.nearWater();
+    if (drinkApplied) ResourceSystem.drink(this.husky.inv);
+
+    // texture: action pose > walk cycle (moving) > idle
+    if (poopApplied) this.huskySprite.setTexture('husky-poop');
+    else if (peeApplied) this.huskySprite.setTexture('husky-pee');
+    else if (trickApplied) this.huskySprite.setTexture('husky-trick');
+    else if (drinkApplied) this.huskySprite.setTexture('husky-idle');
+    else if (this.moving) {
+      this.huskySprite.setTexture(`husky-${this.husky.facing}-${Math.floor(performance.now() / 120) % 2}`);
+    } else {
+      this.huskySprite.setTexture('husky-idle');
+    }
 
     if (tile.type === 'grass') this.tileSprites[tile.row][tile.col].setTint(this.grassColor(tile));
 
@@ -199,11 +212,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private chiEat() {
-    const idx = this.foods.findIndex(
-      (f) => f.tile.col === this.chihuahua.tile.col && f.tile.row === this.chihuahua.tile.row,
-    );
-    if (idx !== -1) {
-      const food = this.foods.splice(idx, 1)[0];
+    const food = takeFoodAt(this.foods, this.chihuahua.tile.col, this.chihuahua.tile.row);
+    if (food) {
       this.chihuahua.treatsEaten += 1;
       this.map.tiles[food.tile.row][food.tile.col].foodPresent = false;
       const key = this.fkey(food.tile.col, food.tile.row);
@@ -218,15 +228,12 @@ export class GameScene extends Phaser.Scene {
     const tile = this.currentTile();
 
     // food pickup
-    const key = this.fkey(this.husky.tile.col, this.husky.tile.row);
-    const idx = this.foods.findIndex(
-      (f) => f.tile.col === this.husky.tile.col && f.tile.row === this.husky.tile.row,
-    );
-    if (idx !== -1) {
-      const food = this.foods.splice(idx, 1)[0];
+    const food = takeFoodAt(this.foods, this.husky.tile.col, this.husky.tile.row);
+    if (food) {
       ResourceSystem.eatFood(this.husky.inv, food.value);
       this.husky.treatsEaten += 1;
       this.currentTile().foodPresent = false;
+      const key = this.fkey(food.tile.col, food.tile.row);
       this.foodSprites.get(key)?.destroy();
       this.foodSprites.delete(key);
     }

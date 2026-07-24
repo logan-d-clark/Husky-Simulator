@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { PALETTE } from '../config/palette';
 import { DESIGN_HEIGHT } from '../main';
-import { GRID, WATER_MAX } from '../config/constants';
+import { GRID, WATER_CAP } from '../config/constants';
 import type { GameScene } from './GameScene';
 
 export class UIScene extends Phaser.Scene {
@@ -36,7 +36,7 @@ export class UIScene extends Phaser.Scene {
         .fillRect(340, y, Math.max(0, Math.min(1, val / max)) * w, 16);
     };
     bar(y0 + 12, s.food, 100, PALETTE.treat);
-    bar(y0 + 36, s.water, WATER_MAX / 8, PALETTE.water);
+    bar(y0 + 36, s.water, WATER_CAP, PALETTE.water);
     bar(y0 + 60, s.poop, 100, PALETTE.fence);
     bar(y0 + 84, s.pee, 100, PALETTE.affection);
     this.texts.foodL.setText(`🍖 Food ${s.food.toFixed(0)}`);

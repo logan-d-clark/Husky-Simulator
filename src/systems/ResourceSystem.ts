@@ -1,7 +1,5 @@
 import type { Inventory } from '../types';
-import { FOOD_RATE, WATER_RATE, WATER_VALUE, WATER_MAX } from '../config/constants';
-
-const WATER_CAP = WATER_MAX / 8; // matches V1 STATUS_BAR_SCALE cap (125)
+import { FOOD_RATE, WATER_RATE, WATER_VALUE, WATER_CAP } from '../config/constants';
 
 export const ResourceSystem = {
   applyMoveCost(inv: Inventory): void {
