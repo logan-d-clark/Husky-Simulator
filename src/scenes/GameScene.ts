@@ -7,8 +7,9 @@ import type { Tile } from '../world/tiles';
 import { Husky } from '../entities/Husky';
 import { ResourceSystem } from '../systems/ResourceSystem';
 import { WorldActions } from '../systems/WorldActions';
-import { OwnerRegistry } from '../systems/OwnerRegistry';
+import { OwnerRegistry, dispenseOverMap } from '../systems/OwnerRegistry';
 import type { Direction } from '../types';
+import type { Food } from '../entities/Food';
 
 export class GameScene extends Phaser.Scene {
   private map!: GameMap;
@@ -23,6 +24,8 @@ export class GameScene extends Phaser.Scene {
   private acc = 0;
   private readonly step = 1000 / SIM_HZ;
   private action: 'drink' | 'poop' | 'pee' | 'trick' | null = null;
+  private foods: Food[] = [];
+  private foodSprites = new Map<string, Phaser.GameObjects.Image>();
 
   constructor() { super('Game'); }
 
@@ -85,12 +88,36 @@ export class GameScene extends Phaser.Scene {
     else if (this.action === 'pee') WorldActions.pee(this.husky, tile, owner);
     else if (this.action === 'trick') WorldActions.trick(this.husky, tile, owner);
     else if (this.action === 'drink' && this.nearWater()) ResourceSystem.drink(this.husky.inv);
+
+    // 4) food dispensing
+    dispenseOverMap(this.map, this.ownerRegistry, Math.random, (food) => {
+      this.foods.push(food);
+      const p = this.grid.tileToPixel(food.tile);
+      const spr = this.add.image(p.x, p.y, food.type).setDepth(8);
+      this.foodSprites.set(this.fkey(food.tile.col, food.tile.row), spr);
+    });
   }
+
+  private fkey(c: number, r: number) { return `${c},${r}`; }
 
   private onEnterTile() {
     const tile = this.currentTile();
+
+    // food pickup
+    const key = this.fkey(this.husky.tile.col, this.husky.tile.row);
+    const idx = this.foods.findIndex(
+      (f) => f.tile.col === this.husky.tile.col && f.tile.row === this.husky.tile.row,
+    );
+    if (idx !== -1) {
+      const food = this.foods.splice(idx, 1)[0];
+      ResourceSystem.eatFood(this.husky.inv, food.value);
+      this.husky.treatsEaten += 1;
+      this.currentTile().foodPresent = false;
+      this.foodSprites.get(key)?.destroy();
+      this.foodSprites.delete(key);
+    }
+
     WorldActions.autoDump(this.husky, tile, this.ownerRegistry.get(tile.ownerId));
-    // food pickup handled in Task 20
   }
 
   private nearWater(): boolean {
