@@ -60,15 +60,25 @@ jobs:
             const labels = (issue.labels || []).map((l) => (typeof l === 'string' ? l : l.name));
             const isClosed = issue.state === 'closed';
 
-            // Resolve the project + its single-select "Status" field (user or org owned).
-            const projInfo = await github.graphql(
-              `query($owner:String!, $number:Int!) {
-                 user(login:$owner)        { projectV2(number:$number){ id title field(name:"Status"){ ... on ProjectV2SingleSelectField { id options { id name } } } } }
-                 organization(login:$owner){ projectV2(number:$number){ id title field(name:"Status"){ ... on ProjectV2SingleSelectField { id options { id name } } } } }
-               }`,
-              { owner, number }
-            );
-            const project = projInfo.user?.projectV2 || projInfo.organization?.projectV2;
+            // Resolve the project + its single-select "Status" field. Query user- and
+            // org-owned separately: a combined query throws because looking up the
+            // wrong owner type returns a GraphQL error (not null), and github.graphql
+            // rejects on any error even when the other half succeeded.
+            const resolveProject = async (kind) => {
+              try {
+                const r = await github.graphql(
+                  `query($owner:String!, $number:Int!) {
+                     ${kind}(login:$owner){ projectV2(number:$number){ id title field(name:"Status"){ ... on ProjectV2SingleSelectField { id options { id name } } } } }
+                   }`,
+                  { owner, number }
+                );
+                return r[kind]?.projectV2 || null;
+              } catch (e) {
+                core.info(`${kind} lookup: ${String(e.message).split('\n')[0]}`);
+                return null;
+              }
+            };
+            const project = (await resolveProject('user')) || (await resolveProject('organization'));
             if (!project) { core.setFailed(`Project #${number} not found for "${owner}".`); return; }
             const statusField = project.field;
             if (!statusField?.options) { core.setFailed('Project has no single-select "Status" field.'); return; }
