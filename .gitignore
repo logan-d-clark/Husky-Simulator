@@ -3,3 +3,23 @@ dist/
 .DS_Store
 *.log
 .superpowers/
+
+# dev-team workflow runtime artifacts (regeneratable; not deliverables — issue #1101)
+memory/
+reports/
+metrics/
+plans/
+
+# dev-team code-intelligence (machine-local)
+.codegraph/
+.repowise/
+graphify-out/
+.claude/settings.local.json
+
+# repowise-generated MCP config carries a machine-specific absolute path
+.mcp.json
+
+# generated test artifacts / machine-local dev-team state
+coverage/
+.claude/init-state.json
+.vscode/mcp.json

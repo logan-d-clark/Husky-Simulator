@@ -1,0 +1,11 @@
+{
+  "detected": "2026-07-25",
+  "stacks": ["typescript", "node"],
+  "frameworks": ["vitest"],
+  "packageManager": "npm",
+  "hasDocker": false,
+  "indicators": {
+    "package.json": true,
+    "tsconfig.json": true
+  }
+}
