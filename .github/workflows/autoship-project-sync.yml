@@ -1,0 +1,123 @@
+# Sync autoship:* issue labels → Projects v2 "Status" column.
+#
+# The dev-team /autoship workflow drives issues through three labels
+# (autoship:ready → autoship:in-progress → autoship:blocked). GitHub's built-in
+# project workflows can't map an arbitrary label to a Status option, so this
+# Action does it: on every relevant issue event it recomputes the issue's true
+# state and sets its Status field on the board.
+#
+# ── ONE-TIME SETUP (both required, or this is a no-op) ────────────────────────
+# 1. Set PROJECT_NUMBER below to your board's number. It's the N in the board URL:
+#      https://github.com/users/logan-d-clark/projects/<N>
+# 2. Create a token that can write Projects, and add it as a repo secret named
+#    PROJECTS_TOKEN (Settings → Secrets and variables → Actions → New secret):
+#      • Classic PAT (simplest): scopes `repo` + `project`
+#      • or fine-grained PAT: this repo + Issues: Read, Pull requests: Read,
+#        and your account's Projects: Read and write
+#
+# Status option names matched (case/space-insensitive): Backlog, Ready,
+# In progress, In review, Blocked, Done. Rename here if your columns differ.
+
+name: autoship → project status
+
+on:
+  issues:
+    types: [opened, reopened, closed, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  # Serialize events for one issue so rapid label add/remove pairs settle in order.
+  group: project-sync-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      PROJECT_OWNER: logan-d-clark
+      PROJECT_NUMBER: "1" # <-- SET THIS (see header)
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.PROJECTS_TOKEN }}
+          script: |
+            const owner = process.env.PROJECT_OWNER;
+            const number = parseInt(process.env.PROJECT_NUMBER, 10);
+            if (!number) {
+              core.warning('PROJECT_NUMBER is not set — skipping. See the workflow header.');
+              return;
+            }
+
+            // Fetch the issue's CURRENT labels/state (payload can be stale when
+            // several label events fire in quick succession).
+            const { data: issue } = await github.rest.issues.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.issue.number,
+            });
+            const labels = (issue.labels || []).map((l) => (typeof l === 'string' ? l : l.name));
+            const isClosed = issue.state === 'closed';
+
+            // Resolve the project + its single-select "Status" field (user or org owned).
+            const projInfo = await github.graphql(
+              `query($owner:String!, $number:Int!) {
+                 user(login:$owner)        { projectV2(number:$number){ id title field(name:"Status"){ ... on ProjectV2SingleSelectField { id options { id name } } } } }
+                 organization(login:$owner){ projectV2(number:$number){ id title field(name:"Status"){ ... on ProjectV2SingleSelectField { id options { id name } } } } }
+               }`,
+              { owner, number }
+            );
+            const project = projInfo.user?.projectV2 || projInfo.organization?.projectV2;
+            if (!project) { core.setFailed(`Project #${number} not found for "${owner}".`); return; }
+            const statusField = project.field;
+            if (!statusField?.options) { core.setFailed('Project has no single-select "Status" field.'); return; }
+
+            // Is there an OPEN pull request that would close this issue? → In review.
+            // (Mirrors /autoship's own eligibility check.)
+            let hasOpenLinkingPR = false;
+            try {
+              const prRes = await github.graphql(
+                `query($id:ID!){ node(id:$id){ ... on Issue {
+                   closedByPullRequestsReferences(first:20, includeClosedPrs:false){ nodes { state } } } } }`,
+                { id: issue.node_id }
+              );
+              hasOpenLinkingPR = (prRes.node?.closedByPullRequestsReferences?.nodes || [])
+                .some((pr) => pr.state === 'OPEN');
+            } catch (e) { core.warning(`Linked-PR lookup failed (defaulting to none): ${e.message}`); }
+
+            // Decide the target Status. Order matters: blocked/in-progress/ready are
+            // mutually exclusive at any moment, but check them explicitly for safety.
+            const has = (n) => labels.includes(n);
+            let target;
+            if (isClosed)                    target = 'Done';
+            else if (has('autoship:blocked'))     target = 'Blocked';
+            else if (has('autoship:in-progress')) target = 'In progress';
+            else if (has('autoship:ready'))       target = 'Ready';
+            else if (hasOpenLinkingPR)            target = 'In review';
+            else                                  target = 'Backlog';
+
+            const norm = (s) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+            const option = statusField.options.find((o) => norm(o.name) === norm(target));
+            if (!option) {
+              core.warning(`No Status option matches "${target}". Options: ${statusField.options.map((o) => o.name).join(', ')}`);
+              return;
+            }
+
+            // Ensure the issue is an item on the board (idempotent), then set Status.
+            const add = await github.graphql(
+              `mutation($project:ID!, $content:ID!){
+                 addProjectV2ItemById(input:{projectId:$project, contentId:$content}){ item { id } } }`,
+              { project: project.id, content: issue.node_id }
+            );
+            const itemId = add.addProjectV2ItemById.item.id;
+
+            await github.graphql(
+              `mutation($project:ID!, $item:ID!, $field:ID!, $opt:String!){
+                 updateProjectV2ItemFieldValue(input:{
+                   projectId:$project, itemId:$item, fieldId:$field,
+                   value:{ singleSelectOptionId:$opt } }){ projectV2Item { id } } }`,
+              { project: project.id, item: itemId, field: statusField.id, opt: option.id }
+            );
+
+            core.info(`Issue #${issue.number} → Status "${option.name}"`);
