@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-  base: '/husky-simulator/',
+  base: '/Husky-Simulator/',
   build: { target: 'es2020', outDir: 'dist' },
 });

@@ -16,6 +16,9 @@ WASD move · Q drink · E trick · C poop · Z pee
 
 ## Deploy (GitHub Pages)
 Pushing to `main` runs `.github/workflows/deploy.yml`, which builds and
-publishes `dist/` to Pages. One-time: repo Settings → Pages → Source = "GitHub
-Actions". The site serves under `/husky-simulator/` (set by `vite.config.ts`
-`base`); rename there if the repo name differs.
+publishes `dist/` to Pages. The workflow self-enables Pages via
+`actions/configure-pages@v5` (`enablement: true`); if that is blocked by org
+policy, enable it once manually: repo Settings → Pages → Source = "GitHub
+Actions". The site serves under `/Husky-Simulator/` (set by `vite.config.ts`
+`base`) — this must match the repository name exactly (case-sensitive); update
+it there if the repo is renamed.
