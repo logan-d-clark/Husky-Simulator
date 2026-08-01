@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { PALETTE } from '../config/palette';
 import { DESIGN_HEIGHT } from '../main';
 import { GRID, WATER_CAP } from '../config/constants';
+import { HUSKY_NAME, CHI_NAME } from '../config/names';
 import type { GameScene } from './GameScene';
 
 const HUD_H = 140;
@@ -80,7 +81,7 @@ export class UIScene extends Phaser.Scene {
 
     const mm = Math.floor(s.secondsLeft / 60), ss = s.secondsLeft % 60;
     this.texts.timer.setText(`⏰ ${mm}:${ss.toString().padStart(2, '0')}`);
-    this.texts.score.setText(`🐺 You ${s.huskyTreats}     🐕 Rival ${s.chiTreats}`);
+    this.texts.score.setText(`🐺 ${HUSKY_NAME} ${s.huskyTreats}     🐕 ${CHI_NAME} ${s.chiTreats}`);
     this.texts.space.setText(
       `📍 Tile · heat ${s.currentTile.heat} · dirt ${s.currentTile.dirt} · dmg ${s.currentTile.destruction}`,
     );
