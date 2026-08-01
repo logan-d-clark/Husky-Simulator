@@ -27,6 +27,7 @@ export class GameScene extends Phaser.Scene {
   private chiSprite!: Phaser.GameObjects.Image;
   private chiMoving = false;
   private chiSpeedMultiplier = getDifficultySettings(DEFAULT_DIFFICULTY).chiSpeedMultiplier;
+  private devMode = false;
   private ownerRegistry!: OwnerRegistry;
   private held: Record<Direction, boolean> = { up: false, down: false, left: false, right: false };
   private moving = false;
@@ -45,10 +46,11 @@ export class GameScene extends Phaser.Scene {
 
   // Phaser runs init(data) before create() on every scene.start, so the
   // difficulty chosen on the menu is resolved here (default Normal if absent).
-  init(data?: { difficulty?: Difficulty }) {
+  init(data?: { difficulty?: Difficulty; devMode?: boolean }) {
     this.chiSpeedMultiplier = getDifficultySettings(
       data?.difficulty ?? DEFAULT_DIFFICULTY,
     ).chiSpeedMultiplier;
+    this.devMode = data?.devMode ?? false;
   }
 
   create() {
@@ -231,14 +233,13 @@ export class GameScene extends Phaser.Scene {
     this.tryChiStep();
     this.chiSprite.setTexture(`chi-${this.chihuahua.facing}-${Math.floor(performance.now() / 160) % 2}`);
 
-    // 6) sim-time / game-over
-    this.tickInSecond = (this.tickInSecond + 1) % TICKS_PER_SECOND;
-    if (this.tickInSecond === 0) {
-      this.secondsLeft -= 1;
-      if (this.secondsLeft <= 0) { this.endGame('Time'); return; }
+    // 6) sim-time / game-over. Dev mode freezes the clock and is invincible.
+    if (!this.devMode) {
+      this.tickInSecond = (this.tickInSecond + 1) % TICKS_PER_SECOND;
+      if (this.tickInSecond === 0) this.secondsLeft -= 1;
     }
-    const go = ResourceSystem.isGameOver(this.husky.inv);
-    if (go) { this.endGame(go); return; }
+    const end = ResourceSystem.shouldEndGame(this.husky.inv, this.secondsLeft, this.devMode);
+    if (end) { this.endGame(end); return; }
   }
 
   private endGame(reason: 'Time' | 'Food' | 'Water') {
