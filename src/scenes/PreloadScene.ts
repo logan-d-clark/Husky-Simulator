@@ -11,7 +11,8 @@ export class PreloadScene extends Phaser.Scene {
 
     svg('grass', new URL('../assets/grass.svg', import.meta.url).href, 28, 28);
     svg('pavement', new URL('../assets/pavement.svg', import.meta.url).href, 28, 28);
-    svg('house', new URL('../assets/house.svg', import.meta.url).href, 28, 28);
+    svg('house-roof', new URL('../assets/house-roof.svg', import.meta.url).href, 28, 28);
+    svg('house-front', new URL('../assets/house-front.svg', import.meta.url).href, 28, 28);
     svg('water', new URL('../assets/water.svg', import.meta.url).href, 28, 28);
     svg('fenceH', new URL('../assets/fence-h.svg', import.meta.url).href, 28, 4);
     svg('fenceV', new URL('../assets/fence-v.svg', import.meta.url).href, 4, 28);
