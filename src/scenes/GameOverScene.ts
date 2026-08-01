@@ -12,7 +12,9 @@ export class GameOverScene extends Phaser.Scene {
     const cx = this.scale.width / 2;
     this.cameras.main.setBackgroundColor(PALETTE.hudBg);
     const reasonText: Record<Gmeta['reason'], string> = {
-      Time: 'Your owner came home!', Food: 'You ran out of food!', Water: 'You ran out of water!',
+      Time: `${HUSKY_NAME}'s owner came home!`,
+      Food: `${HUSKY_NAME} ran out of food!`,
+      Water: `${HUSKY_NAME} ran out of water!`,
     };
     this.add.text(cx, 140, 'Game Over', { fontSize: '48px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5);
     this.add.text(cx, 210, reasonText[this.meta.reason], { fontSize: '24px', color: '#ffffff' }).setOrigin(0.5);

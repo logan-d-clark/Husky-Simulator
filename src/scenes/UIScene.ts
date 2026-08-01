@@ -1,7 +1,6 @@
 import Phaser from 'phaser';
 import { PALETTE } from '../config/palette';
-import { DESIGN_HEIGHT } from '../main';
-import { GRID, WATER_CAP, POOP_MAX, PEE_MAX } from '../config/constants';
+import { GRID, WATER_CAP, POOP_MAX, PEE_MAX, DESIGN_HEIGHT } from '../config/constants';
 import { HUSKY_NAME, CHI_NAME } from '../config/names';
 import { tolerancePips, pipString, heatLabel } from '../ui/indicators';
 import type { GameScene } from './GameScene';
