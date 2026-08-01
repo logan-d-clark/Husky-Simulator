@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { config, DEFAULTS, resetConfig, applyConfig } from '../src/config/gameConfig';
+import { config, DEFAULTS, resetConfig, applyConfig, serializeConfig } from '../src/config/gameConfig';
 
 afterEach(() => resetConfig());
 
@@ -23,5 +23,19 @@ describe('gameConfig', () => {
 
   it('DEFAULTS is frozen (a durable baseline to restore from)', () => {
     expect(Object.isFrozen(DEFAULTS)).toBe(true);
+  });
+
+  describe('serializeConfig', () => {
+    it('emits one KEY=value line per field', () => {
+      const text = serializeConfig();
+      for (const key of Object.keys(DEFAULTS)) {
+        expect(text).toContain(`${key}=${config[key as keyof typeof config]}`);
+      }
+      expect(text.trim().split('\n')).toHaveLength(Object.keys(DEFAULTS).length);
+    });
+    it('reflects live edits', () => {
+      applyConfig({ FOOD_RATE: 0.42 });
+      expect(serializeConfig()).toContain('FOOD_RATE=0.42');
+    });
   });
 });

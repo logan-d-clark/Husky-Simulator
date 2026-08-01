@@ -15,6 +15,7 @@ import { createBadges, updateBadges, type Badge } from '../ui/HouseholdProfile';
 import type { Direction, TileCoord } from '../types';
 import { takeFoodAt, type Food } from '../entities/Food';
 import { getDifficultySettings, DEFAULT_DIFFICULTY, type Difficulty } from '../config/difficulty';
+import { DevPanel } from '../ui/DevPanel';
 
 export class GameScene extends Phaser.Scene {
   private map!: GameMap;
@@ -28,6 +29,7 @@ export class GameScene extends Phaser.Scene {
   private chiMoving = false;
   private chiSpeedMultiplier = getDifficultySettings(DEFAULT_DIFFICULTY).chiSpeedMultiplier;
   private devMode = false;
+  private devPanel?: DevPanel;
   private ownerRegistry!: OwnerRegistry;
   private held: Record<Direction, boolean> = { up: false, down: false, left: false, right: false };
   private moving = false;
@@ -89,6 +91,14 @@ export class GameScene extends Phaser.Scene {
     this.badges = createBadges(this, this.map, this.ownerRegistry, this.grid);
 
     this.scene.launch('UI');
+
+    // Dev mode: live config panel toggled with backtick; torn down on scene exit.
+    if (this.devMode) {
+      this.devPanel = new DevPanel();
+      this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.BACKTICK)
+        .on('down', () => this.devPanel?.toggle());
+      this.events.once('shutdown', () => { this.devPanel?.destroy(); this.devPanel = undefined; });
+    }
   }
 
   getHudState() {

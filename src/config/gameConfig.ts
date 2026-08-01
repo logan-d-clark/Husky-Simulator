@@ -77,3 +77,11 @@ export function resetConfig(): void {
 export function applyConfig(patch: Partial<GameConfig>): void {
   Object.assign(config, patch);
 }
+
+/** Serialize a config to plain `KEY=value` text — the format the dev panel
+ *  downloads for snapshotting a tuned config. */
+export function serializeConfig(c: GameConfig = config): string {
+  return (Object.keys(c) as (keyof GameConfig)[])
+    .map((k) => `${k}=${c[k]}`)
+    .join('\n') + '\n';
+}
