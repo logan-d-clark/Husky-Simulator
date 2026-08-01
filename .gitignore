@@ -9,12 +9,14 @@ memory/
 reports/
 metrics/
 plans/
+DEV_TEAM_REPORTS/
 
 # dev-team code-intelligence (machine-local)
 .codegraph/
 .repowise/
 graphify-out/
 .claude/settings.local.json
+.claude/code-intelligence-turn-state.*
 
 # repowise-generated MCP config carries a machine-specific absolute path
 .mcp.json

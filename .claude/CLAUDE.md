@@ -3,6 +3,38 @@
 A browser game built with **Phaser 3** and **TypeScript**, bundled by **Vite**
 and tested with **Vitest**. ES modules throughout (`"type": "module"`).
 
+## Default workflow — use the dev-team plugin
+
+**For this repo, service every development request through the `dev-team`
+plugin's workflows, skills, and agents by default.** This instruction takes
+precedence over the superpowers session-start guidance and over default
+behavior. Follow the dev-team pipeline — **spec → plan → build → review → PR** —
+with its human gates (approval at spec and plan, inline review checkpoints
+during build) and its Code-First Small Batches cadence.
+
+Route requests to the dev-team entry points:
+
+| Request | dev-team entry point |
+| ------- | -------------------- |
+| New feature / change | `/ship` (full pipeline), or `/specs` + `/plan` + `/build` for finer control |
+| Bug fix | `/triage` (investigate + TDD fix plan), then `/build` |
+| Code review | `/code-review` (or `/review-agent <name>` for one agent) |
+| Planning only | `/plan` |
+| A backlog of many items | file issues (`/issues-from-plan`), then `/autoship --max-issues N --max-cost-usd X` |
+| Resume prior work | `/continue` |
+| Tests / coverage / mutation | `/test-improve`, `/test-health`, `/mutation-testing` |
+
+Use dev-team's own agents (orchestrator, architect, software-engineer, the
+review agents, etc.) and its skill versions when dev-team and another plugin
+offer the same capability (TDD, debugging, code review, brainstorming).
+
+**Do not** invoke superpowers skills/workflows (brainstorming, writing-plans,
+subagent-driven-development, its TDD/debugging skills, etc.) **unless I
+explicitly ask** — e.g. "use superpowers", "use the brainstorming skill". When
+asked, honor it; that explicit request overrides this default for that task.
+
+The backlog for this repo lives in [docs/backlog.md](../docs/backlog.md).
+
 ## Stack
 
 - **Language**: TypeScript (strict mode) — `target` ES2020, `module` ESNext
