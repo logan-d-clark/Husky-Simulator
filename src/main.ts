@@ -15,7 +15,7 @@ new Phaser.Game({
   parent: 'game',
   backgroundColor: '#1a1a1a',
   width: DESIGN_WIDTH,
-  height: DESIGN_HEIGHT + 140,      // + HUD strip
+  height: DESIGN_HEIGHT + 180,      // + HUD strip (HUD_H in UIScene)
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
   scene: [BootScene, PreloadScene, MenuScene, InstructionsScene, GameScene, UIScene, GameOverScene],
 });
