@@ -11,7 +11,7 @@ import { WorldActions } from '../systems/WorldActions';
 import { AISystem } from '../systems/AISystem';
 import { OwnerRegistry, dispenseOverMap } from '../systems/OwnerRegistry';
 import { createBadges, updateBadges, type Badge } from '../ui/HouseholdProfile';
-import type { Direction } from '../types';
+import type { Direction, TileCoord } from '../types';
 import { takeFoodAt, type Food } from '../entities/Food';
 import { getDifficultySettings, DEFAULT_DIFFICULTY, type Difficulty } from '../config/difficulty';
 
@@ -171,7 +171,7 @@ export class GameScene extends Phaser.Scene {
   // own moving-flag, direction resolution, and per-tile side effects.
   private advanceEntity(
     sprite: Phaser.GameObjects.Image,
-    to: { col: number; row: number },
+    to: TileCoord,
     duration: number,
     onArrive: () => void,
   ) {
