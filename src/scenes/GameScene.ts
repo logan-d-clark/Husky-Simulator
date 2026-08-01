@@ -101,7 +101,7 @@ export class GameScene extends Phaser.Scene {
     kb.removeAllKeys(true);
     const map: Record<string, Direction> = { W: 'up', S: 'down', A: 'left', D: 'right' };
     for (const [k, dir] of Object.entries(map)) {
-      kb.addKey(k).on('down', () => { this.held[dir] = true; this.husky.facing = dir; });
+      kb.addKey(k).on('down', () => { this.held[dir] = true; this.husky.facing = dir; this.tryStep(); });
       kb.addKey(k).on('up', () => { this.held[dir] = false; });
     }
     kb.addKey('Q').on('down', () => { this.action = 'drink'; });
@@ -121,22 +121,34 @@ export class GameScene extends Phaser.Scene {
 
   private currentTile() { return this.map.tiles[this.husky.tile.row][this.husky.tile.col]; }
 
+  // Advance one tile if a direction key is held and the path is clear. Called
+  // on keydown (immediate start from rest), from each sim tick (safety-net
+  // kick), and from each tween's onComplete (to chain steps into continuous
+  // motion while the key stays held). The `moving` guard makes overlapping
+  // calls no-ops, so a tile's move cost is applied exactly once per step.
+  private tryStep() {
+    if (this.over || this.moving) return;
+    const dir = (['up', 'down', 'left', 'right'] as Direction[]).find((d) => this.held[d]);
+    if (!dir || !this.grid.canMove(this.husky.tile, dir)) return;
+    this.husky.facing = dir;
+    const to = this.grid.neighbor(this.husky.tile, dir);
+    this.husky.tile = to;
+    ResourceSystem.applyMoveCost(this.husky.inv);
+    this.moving = true;
+    const p = this.grid.tileToPixel(to);
+    this.tweens.add({
+      targets: this.huskySprite, x: p.x, y: p.y, duration: this.step, ease: 'Linear',
+      onComplete: () => { this.moving = false; this.onEnterTile(); this.tryStep(); },
+    });
+  }
+
   private simTick() {
     if (this.over) return;
 
-    // 1) movement
-    const dir = (['up', 'down', 'left', 'right'] as Direction[]).find((d) => this.held[d]);
-    if (dir && !this.moving && this.grid.canMove(this.husky.tile, dir)) {
-      const to = this.grid.neighbor(this.husky.tile, dir);
-      this.husky.tile = to;
-      ResourceSystem.applyMoveCost(this.husky.inv);
-      this.moving = true;
-      const p = this.grid.tileToPixel(to);
-      this.tweens.add({
-        targets: this.huskySprite, x: p.x, y: p.y, duration: this.step,
-        onComplete: () => { this.moving = false; this.onEnterTile(); },
-      });
-    }
+    // 1) movement — kick from rest; continuous tile-to-tile gliding is driven
+    //    by each tween's onComplete (see tryStep), so there is no per-tile pause.
+    this.tryStep();
+
     // 2) heat every tick (even standing)
     ResourceSystem.applyHeat(this.husky.inv, this.currentTile().heat);
 
