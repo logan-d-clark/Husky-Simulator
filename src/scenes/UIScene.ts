@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { PALETTE } from '../config/palette';
-import { GRID, WATER_CAP, POOP_MAX, PEE_MAX, DESIGN_HEIGHT } from '../config/constants';
+import { GRID, DESIGN_HEIGHT } from '../config/constants';
+import { config } from '../config/gameConfig';
 import { HUSKY_NAME, CHI_NAME } from '../config/names';
 import { tolerancePips, pipString, heatLabel } from '../ui/indicators';
 import type { GameScene } from './GameScene';
@@ -89,9 +90,9 @@ export class UIScene extends Phaser.Scene {
     this.texts.food.setText(`🍖 Food ${s.food.toFixed(0)}`);
 
     // Blizzard's own resource bars (water has a cap; poop/pee are need-to-go).
-    bar(LEFT_BAR, y0 + 99, s.water, WATER_CAP, PALETTE.water);
-    bar(LEFT_BAR, y0 + 125, s.poop, POOP_MAX, PALETTE.fence);
-    bar(LEFT_BAR, y0 + 151, s.pee, PEE_MAX, PALETTE.affection);
+    bar(LEFT_BAR, y0 + 99, s.water, config.WATER_CAP, PALETTE.water);
+    bar(LEFT_BAR, y0 + 125, s.poop, config.POOP_MAX, PALETTE.fence);
+    bar(LEFT_BAR, y0 + 151, s.pee, config.PEE_MAX, PALETTE.affection);
     this.texts.waterL.setText(`💧 Water ${s.water.toFixed(0)}`);
     this.texts.poopL.setText(`💩 Poop ${s.poop.toFixed(0)}`);
     this.texts.peeL.setText(`🟡 Pee ${s.pee.toFixed(0)}`);
@@ -112,7 +113,7 @@ export class UIScene extends Phaser.Scene {
     this.texts.heat.setColor(hot ? '#ff8a5a' : '#7fbfe0');
     this.texts.csPoopL.setText('Poop');
     this.texts.csPeeL.setText('Pee');
-    bar(CS_B_BAR, y0 + 91, s.currentTile.dirt, POOP_MAX, PALETTE.fence);
-    bar(CS_B_BAR, y0 + 121, s.currentTile.destruction, PEE_MAX, PALETTE.affection);
+    bar(CS_B_BAR, y0 + 91, s.currentTile.dirt, config.POOP_MAX, PALETTE.fence);
+    bar(CS_B_BAR, y0 + 121, s.currentTile.destruction, config.PEE_MAX, PALETTE.affection);
   }
 }

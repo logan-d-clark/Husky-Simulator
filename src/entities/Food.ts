@@ -1,12 +1,12 @@
 import type { FoodType, TileCoord } from '../types';
-import { TREAT_VALUE, BOWL_MULTIPLIER, BAG_MULTIPLIER } from '../config/constants';
+import { config } from '../config/gameConfig';
 
 export interface Food { type: FoodType; value: number; tile: TileCoord; }
 
 export function foodValue(type: FoodType): number {
-  if (type === 'bowl') return BOWL_MULTIPLIER * TREAT_VALUE;
-  if (type === 'bag') return BAG_MULTIPLIER * TREAT_VALUE;
-  return TREAT_VALUE;
+  if (type === 'bowl') return config.BOWL_MULTIPLIER * config.TREAT_VALUE;
+  if (type === 'bag') return config.BAG_MULTIPLIER * config.TREAT_VALUE;
+  return config.TREAT_VALUE;
 }
 
 // Finds the food at (col,row), removes it from the array, and returns it.

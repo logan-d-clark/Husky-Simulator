@@ -2,7 +2,8 @@ import Phaser from 'phaser';
 import mapCsv from '../data/map.csv?raw';
 import { parseMap, type GameMap } from '../world/MapParser';
 import { Grid } from '../world/Grid';
-import { GRID, SIM_HZ, GAME_SECONDS, TICKS_PER_SECOND } from '../config/constants';
+import { GRID, SIM_HZ, TICKS_PER_SECOND } from '../config/constants';
+import { config } from '../config/gameConfig';
 import type { Tile } from '../world/tiles';
 import { Husky } from '../entities/Husky';
 import { Chihuahua } from '../entities/Chihuahua';
@@ -34,7 +35,7 @@ export class GameScene extends Phaser.Scene {
   private action: 'drink' | 'poop' | 'pee' | 'trick' | null = null;
   private foods: Food[] = [];
   private foodSprites = new Map<string, Phaser.GameObjects.Image>();
-  private secondsLeft = GAME_SECONDS;
+  private secondsLeft = config.GAME_SECONDS;
   private tickInSecond = 0;
   private over = false;
   private badges: Badge[] = [];
@@ -62,7 +63,7 @@ export class GameScene extends Phaser.Scene {
     this.action = null;
     this.foods = [];
     this.foodSprites = new Map();
-    this.secondsLeft = GAME_SECONDS;
+    this.secondsLeft = config.GAME_SECONDS;
     this.tickInSecond = 0;
     this.over = false;
     this.badges = [];

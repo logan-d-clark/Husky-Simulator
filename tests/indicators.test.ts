@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { tolerancePips, pipString, heatLabel, TOLERANCE_MAX } from '../src/ui/indicators';
-import { HEAT_GRASS, HEAT_PAVEMENT } from '../src/config/constants';
+import { DEFAULTS } from '../src/config/gameConfig';
+
+const HEAT_GRASS = DEFAULTS.HEAT_GRASS;
+const HEAT_PAVEMENT = DEFAULTS.HEAT_PAVEMENT;
 
 describe('tolerancePips', () => {
   it('inverts sensitivity: least sensitive = most tolerant', () => {
