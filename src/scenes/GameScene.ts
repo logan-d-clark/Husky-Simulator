@@ -11,8 +11,9 @@ import { WorldActions } from '../systems/WorldActions';
 import { AISystem } from '../systems/AISystem';
 import { OwnerRegistry, dispenseOverMap } from '../systems/OwnerRegistry';
 import { createBadges, updateBadges, type Badge } from '../ui/HouseholdProfile';
-import type { Direction } from '../types';
+import type { Direction, TileCoord } from '../types';
 import { takeFoodAt, type Food } from '../entities/Food';
+import { getDifficultySettings, DEFAULT_DIFFICULTY, type Difficulty } from '../config/difficulty';
 
 export class GameScene extends Phaser.Scene {
   private map!: GameMap;
@@ -24,7 +25,7 @@ export class GameScene extends Phaser.Scene {
   chihuahua!: Chihuahua;
   private chiSprite!: Phaser.GameObjects.Image;
   private chiMoving = false;
-  private chiCounter = 0;
+  private chiSpeedMultiplier = getDifficultySettings(DEFAULT_DIFFICULTY).chiSpeedMultiplier;
   private ownerRegistry!: OwnerRegistry;
   private held: Record<Direction, boolean> = { up: false, down: false, left: false, right: false };
   private moving = false;
@@ -41,6 +42,14 @@ export class GameScene extends Phaser.Scene {
 
   constructor() { super('Game'); }
 
+  // Phaser runs init(data) before create() on every scene.start, so the
+  // difficulty chosen on the menu is resolved here (default Normal if absent).
+  init(data?: { difficulty?: Difficulty }) {
+    this.chiSpeedMultiplier = getDifficultySettings(
+      data?.difficulty ?? DEFAULT_DIFFICULTY,
+    ).chiSpeedMultiplier;
+  }
+
   create() {
     // Reset ALL per-run state up front. Phaser's scene.start() re-runs create()
     // but does NOT reset class fields to their declared initial values, so every
@@ -49,7 +58,6 @@ export class GameScene extends Phaser.Scene {
     this.held = { up: false, down: false, left: false, right: false };
     this.moving = false;
     this.chiMoving = false;
-    this.chiCounter = 0;
     this.acc = 0;
     this.action = null;
     this.foods = [];
@@ -135,10 +143,41 @@ export class GameScene extends Phaser.Scene {
     this.husky.tile = to;
     ResourceSystem.applyMoveCost(this.husky.inv);
     this.moving = true;
+    this.advanceEntity(this.huskySprite, to, this.step, () => {
+      this.moving = false; this.onEnterTile(); this.tryStep();
+    });
+  }
+
+  // Chihuahua step: pathfind one tile toward the nearest treat and glide there,
+  // chaining on arrival for continuous smooth motion (mirrors the husky). Speed
+  // is difficulty-driven via chiSpeedMultiplier. Called from each sim tick as a
+  // safety-net kick when idle (e.g. once new food appears), and from its own
+  // onArrive to sustain the glide.
+  private tryChiStep() {
+    if (this.over || this.chiMoving) return;
+    const dir = AISystem.nextStep(this.grid, this.chihuahua.tile, this.foods);
+    if (!dir) return;
+    this.chihuahua.facing = dir;
+    const to = this.grid.neighbor(this.chihuahua.tile, dir);
+    this.chihuahua.tile = to;
+    this.chiMoving = true;
+    this.advanceEntity(this.chiSprite, to, this.step * this.chiSpeedMultiplier, () => {
+      this.chiMoving = false; this.chiEat(); this.tryChiStep();
+    });
+  }
+
+  // Shared per-tile movement mechanics for both entities: tween the sprite to a
+  // tile's pixel center over `duration`, then fire `onArrive`. Callers own their
+  // own moving-flag, direction resolution, and per-tile side effects.
+  private advanceEntity(
+    sprite: Phaser.GameObjects.Image,
+    to: TileCoord,
+    duration: number,
+    onArrive: () => void,
+  ) {
     const p = this.grid.tileToPixel(to);
     this.tweens.add({
-      targets: this.huskySprite, x: p.x, y: p.y, duration: this.step, ease: 'Linear',
-      onComplete: () => { this.moving = false; this.onEnterTile(); this.tryStep(); },
+      targets: sprite, x: p.x, y: p.y, duration, ease: 'Linear', onComplete: onArrive,
     });
   }
 
@@ -185,22 +224,10 @@ export class GameScene extends Phaser.Scene {
       this.foodSprites.set(this.fkey(food.tile.col, food.tile.row), spr);
     });
 
-    // 5) chihuahua AI (steps every 2nd sim tick)
-    this.chiCounter = (this.chiCounter + 1) % 2;
-    if (this.chiCounter === 0 && !this.chiMoving) {
-      const dir = AISystem.nextStep(this.grid, this.chihuahua.tile, this.foods);
-      if (dir) {
-        this.chihuahua.facing = dir;
-        const to = this.grid.neighbor(this.chihuahua.tile, dir);
-        this.chihuahua.tile = to;
-        this.chiMoving = true;
-        const cp = this.grid.tileToPixel(to);
-        this.tweens.add({
-          targets: this.chiSprite, x: cp.x, y: cp.y, duration: this.step * 2,
-          onComplete: () => { this.chiMoving = false; this.chiEat(); },
-        });
-      }
-    }
+    // 5) chihuahua AI — kick from rest; continuous tile-to-tile gliding is
+    //    driven by each tween's onArrive (see tryChiStep), so there is no
+    //    per-step pause. Speed is difficulty-driven (step * chiSpeedMultiplier).
+    this.tryChiStep();
     this.chiSprite.setTexture(`chi-${this.chihuahua.facing}-${Math.floor(performance.now() / 160) % 2}`);
 
     // 6) sim-time / game-over
