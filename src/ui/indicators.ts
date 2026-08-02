@@ -1,4 +1,4 @@
-import { HEAT_PAVEMENT } from '../config/constants';
+import { config } from '../config/gameConfig';
 
 // Player-friendly mappings for raw backend tile/owner values.
 
@@ -21,5 +21,5 @@ export function pipString(filled: number, max = TOLERANCE_MAX): string {
 // Tiles at or above pavement heat read as "High"; cooler tiles (grass, houses,
 // water) read as "Low".
 export function heatLabel(heat: number): 'Low' | 'High' {
-  return heat >= HEAT_PAVEMENT ? 'High' : 'Low';
+  return heat >= config.HEAT_PAVEMENT ? 'High' : 'Low';
 }

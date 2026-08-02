@@ -1,7 +1,7 @@
 import { parseBlock } from './blockParser';
 import { emptyFences, type Tile } from './tiles';
 import type { TileType } from '../types';
-import { HEAT_GRASS, HEAT_PAVEMENT } from '../config/constants';
+import { config } from '../config/gameConfig';
 
 export interface GameMap { rows: number; cols: number; tiles: Tile[][]; }
 
@@ -23,7 +23,7 @@ export function parseMap(csvText: string): GameMap {
       if (fences.includes('r')) fenceEdges.right = true;
       if (fences.includes('t')) fenceEdges.top = true;
       if (fences.includes('b')) fenceEdges.bottom = true;
-      const heat = type === 'grass' ? HEAT_GRASS : type === 'pavement' ? HEAT_PAVEMENT : 0;
+      const heat = type === 'grass' ? config.HEAT_GRASS : type === 'pavement' ? config.HEAT_PAVEMENT : 0;
       return {
         col, row, type, ownerId, fences: fenceEdges,
         heat, dirt: 0, destruction: 0, foodPresent: false,

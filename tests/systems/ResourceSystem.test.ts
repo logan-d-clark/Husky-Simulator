@@ -36,4 +36,18 @@ describe('ResourceSystem', () => {
     expect(ResourceSystem.isGameOver(j)).toBe('Water');
     expect(ResourceSystem.isGameOver(inv())).toBeNull();
   });
+  describe('shouldEndGame', () => {
+    it('ends on time, food, or water when not in dev mode', () => {
+      expect(ResourceSystem.shouldEndGame(inv(), 0, false)).toBe('Time');
+      const i = inv(); i.food = 0;
+      expect(ResourceSystem.shouldEndGame(i, 100, false)).toBe('Food');
+      const j = inv(); j.water = 0;
+      expect(ResourceSystem.shouldEndGame(j, 100, false)).toBe('Water');
+      expect(ResourceSystem.shouldEndGame(inv(), 100, false)).toBeNull();
+    });
+    it('dev mode is invincible: never ends even at 0 food/water/time', () => {
+      const dead = { food: 0, water: 0, poop: 0, pee: 0 };
+      expect(ResourceSystem.shouldEndGame(dead, 0, true)).toBeNull();
+    });
+  });
 });

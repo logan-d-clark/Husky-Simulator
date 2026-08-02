@@ -4,9 +4,11 @@ import { DEFAULT_DIFFICULTY, DIFFICULTIES, type Difficulty } from '../config/dif
 
 export class MenuScene extends Phaser.Scene {
   private difficulty: Difficulty = DEFAULT_DIFFICULTY;
+  private devMode = false;
   constructor() { super('Menu'); }
   create() {
     this.difficulty = DEFAULT_DIFFICULTY;
+    this.devMode = false;
     const cx = this.scale.width / 2;
     this.cameras.main.setBackgroundColor(PALETTE.grassBase);
     this.add.text(cx, 110, 'Husky Simulator', { fontSize: '48px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5);
@@ -40,6 +42,18 @@ export class MenuScene extends Phaser.Scene {
     });
     refresh();
 
+    // Dev mode toggle — invincible husky + frozen timer + live config panel.
+    const devBtn = this.add.text(cx, 340, '', {
+      fontSize: '18px', color: PALETTE.hudText, backgroundColor: PALETTE.hudBg, padding: { x: 16, y: 6 },
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    const refreshDev = () => {
+      devBtn.setText(`Dev Mode: ${this.devMode ? 'On' : 'Off'}`);
+      devBtn.setColor(this.devMode ? '#26301f' : PALETTE.hudText);
+      devBtn.setBackgroundColor(this.devMode ? '#8fd98f' : PALETTE.hudBg);
+    };
+    devBtn.on('pointerdown', () => { this.devMode = !this.devMode; refreshDev(); });
+    refreshDev();
+
     const btn = (y: number, label: string, fn: () => void) => {
       const t = this.add.text(cx, y, label, { fontSize: '28px', color: PALETTE.hudText, backgroundColor: PALETTE.hudBg, padding: { x: 20, y: 10 } })
         .setOrigin(0.5).setInteractive({ useHandCursor: true });
@@ -47,8 +61,8 @@ export class MenuScene extends Phaser.Scene {
       t.on('pointerout', () => t.setColor(PALETTE.hudText));
       t.on('pointerdown', fn);
     };
-    btn(370, 'Start', () => { this.scene.start('Game', { difficulty: this.difficulty }); });
-    btn(440, 'How to Play', () => { this.scene.start('Instructions'); });
-    btn(510, 'Credits', () => { this.scene.start('Instructions'); }); // credits shown on instructions page footer
+    btn(400, 'Start', () => { this.scene.start('Game', { difficulty: this.difficulty, devMode: this.devMode }); });
+    btn(470, 'How to Play', () => { this.scene.start('Instructions'); });
+    btn(540, 'Credits', () => { this.scene.start('Instructions'); }); // credits shown on instructions page footer
   }
 }

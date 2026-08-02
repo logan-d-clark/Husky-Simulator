@@ -2,7 +2,8 @@ import Phaser from 'phaser';
 import mapCsv from '../data/map.csv?raw';
 import { parseMap, type GameMap } from '../world/MapParser';
 import { Grid } from '../world/Grid';
-import { GRID, SIM_HZ, GAME_SECONDS, TICKS_PER_SECOND } from '../config/constants';
+import { GRID, SIM_HZ, TICKS_PER_SECOND } from '../config/constants';
+import { config } from '../config/gameConfig';
 import type { Tile } from '../world/tiles';
 import { Husky } from '../entities/Husky';
 import { Chihuahua } from '../entities/Chihuahua';
@@ -14,6 +15,7 @@ import { createBadges, updateBadges, type Badge } from '../ui/HouseholdProfile';
 import type { Direction, TileCoord } from '../types';
 import { takeFoodAt, type Food } from '../entities/Food';
 import { getDifficultySettings, DEFAULT_DIFFICULTY, type Difficulty } from '../config/difficulty';
+import { DevPanel } from '../ui/DevPanel';
 
 export class GameScene extends Phaser.Scene {
   private map!: GameMap;
@@ -26,6 +28,8 @@ export class GameScene extends Phaser.Scene {
   private chiSprite!: Phaser.GameObjects.Image;
   private chiMoving = false;
   private chiSpeedMultiplier = getDifficultySettings(DEFAULT_DIFFICULTY).chiSpeedMultiplier;
+  private devMode = false;
+  private devPanel?: DevPanel;
   private ownerRegistry!: OwnerRegistry;
   private held: Record<Direction, boolean> = { up: false, down: false, left: false, right: false };
   private moving = false;
@@ -34,7 +38,7 @@ export class GameScene extends Phaser.Scene {
   private action: 'drink' | 'poop' | 'pee' | 'trick' | null = null;
   private foods: Food[] = [];
   private foodSprites = new Map<string, Phaser.GameObjects.Image>();
-  private secondsLeft = GAME_SECONDS;
+  private secondsLeft = config.GAME_SECONDS;
   private tickInSecond = 0;
   private over = false;
   private badges: Badge[] = [];
@@ -44,10 +48,11 @@ export class GameScene extends Phaser.Scene {
 
   // Phaser runs init(data) before create() on every scene.start, so the
   // difficulty chosen on the menu is resolved here (default Normal if absent).
-  init(data?: { difficulty?: Difficulty }) {
+  init(data?: { difficulty?: Difficulty; devMode?: boolean }) {
     this.chiSpeedMultiplier = getDifficultySettings(
       data?.difficulty ?? DEFAULT_DIFFICULTY,
     ).chiSpeedMultiplier;
+    this.devMode = data?.devMode ?? false;
   }
 
   create() {
@@ -62,7 +67,7 @@ export class GameScene extends Phaser.Scene {
     this.action = null;
     this.foods = [];
     this.foodSprites = new Map();
-    this.secondsLeft = GAME_SECONDS;
+    this.secondsLeft = config.GAME_SECONDS;
     this.tickInSecond = 0;
     this.over = false;
     this.badges = [];
@@ -86,6 +91,14 @@ export class GameScene extends Phaser.Scene {
     this.badges = createBadges(this, this.map, this.ownerRegistry, this.grid);
 
     this.scene.launch('UI');
+
+    // Dev mode: live config panel toggled with backtick; torn down on scene exit.
+    if (this.devMode) {
+      this.devPanel = new DevPanel();
+      this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.BACKTICK)
+        .on('down', () => this.devPanel?.toggle());
+      this.events.once('shutdown', () => { this.devPanel?.destroy(); this.devPanel = undefined; });
+    }
   }
 
   getHudState() {
@@ -230,14 +243,13 @@ export class GameScene extends Phaser.Scene {
     this.tryChiStep();
     this.chiSprite.setTexture(`chi-${this.chihuahua.facing}-${Math.floor(performance.now() / 160) % 2}`);
 
-    // 6) sim-time / game-over
-    this.tickInSecond = (this.tickInSecond + 1) % TICKS_PER_SECOND;
-    if (this.tickInSecond === 0) {
-      this.secondsLeft -= 1;
-      if (this.secondsLeft <= 0) { this.endGame('Time'); return; }
+    // 6) sim-time / game-over. Dev mode freezes the clock and is invincible.
+    if (!this.devMode) {
+      this.tickInSecond = (this.tickInSecond + 1) % TICKS_PER_SECOND;
+      if (this.tickInSecond === 0) this.secondsLeft -= 1;
     }
-    const go = ResourceSystem.isGameOver(this.husky.inv);
-    if (go) { this.endGame(go); return; }
+    const end = ResourceSystem.shouldEndGame(this.husky.inv, this.secondsLeft, this.devMode);
+    if (end) { this.endGame(end); return; }
   }
 
   private endGame(reason: 'Time' | 'Food' | 'Water') {
