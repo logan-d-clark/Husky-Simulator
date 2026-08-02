@@ -38,10 +38,6 @@ export function isThirsty(inv: Inventory): boolean {
   return inv.water < config.WATER_CAP * 0.3;
 }
 
-export function bladderFull(inv: Inventory): boolean {
-  return inv.poop >= config.POOP_MAX * 0.9 || inv.pee >= config.PEE_MAX * 0.9;
-}
-
 function isWaterAdjacent(grid: Grid, t: TileCoord): boolean {
   for (const [dc, dr] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
     if (grid.tileAt(t.col + dc, t.row + dr)?.type === 'water') return true;

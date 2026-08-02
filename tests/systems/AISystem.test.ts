@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { parseMap } from '../../src/world/MapParser';
 import { Grid } from '../../src/world/Grid';
 import {
-  nextBanditMove, bestSmelledFood, smellRadius, isThirsty, bladderFull, patrolDir, type Bandit,
+  nextBanditMove, bestSmelledFood, smellRadius, isThirsty, patrolDir, type Bandit,
 } from '../../src/systems/AISystem';
 import { config, resetConfig } from '../../src/config/gameConfig';
 import type { Food } from '../../src/entities/Food';
@@ -40,15 +40,10 @@ describe('bestSmelledFood', () => {
   });
 });
 
-describe('needs thresholds', () => {
-  it('isThirsty below 30% of water cap', () => {
+describe('isThirsty', () => {
+  it('is true below 30% of water cap', () => {
     expect(isThirsty({ food: 50, water: config.WATER_CAP * 0.2, poop: 0, pee: 0 })).toBe(true);
     expect(isThirsty({ food: 50, water: config.WATER_CAP * 0.9, poop: 0, pee: 0 })).toBe(false);
-  });
-  it('bladderFull near the poop/pee caps', () => {
-    expect(bladderFull({ food: 50, water: 50, poop: config.POOP_MAX, pee: 0 })).toBe(true);
-    expect(bladderFull({ food: 50, water: 50, poop: 0, pee: config.PEE_MAX })).toBe(true);
-    expect(bladderFull({ food: 50, water: 50, poop: 0, pee: 0 })).toBe(false);
   });
 });
 
