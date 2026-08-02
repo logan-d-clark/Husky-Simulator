@@ -6,16 +6,15 @@ import { GameScene } from './scenes/GameScene';
 import { UIScene } from './scenes/UIScene';
 import { GameOverScene } from './scenes/GameOverScene';
 import { InstructionsScene } from './scenes/InstructionsScene';
-
-export const DESIGN_WIDTH = 1344;   // 48 cols * 28px
-export const DESIGN_HEIGHT = 728;   // 26 rows * 28px
+import { DESIGN_WIDTH, DESIGN_HEIGHT } from './config/constants';
+import { HUD_H } from './scenes/UIScene';
 
 new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',
   backgroundColor: '#1a1a1a',
   width: DESIGN_WIDTH,
-  height: DESIGN_HEIGHT + 140,      // + HUD strip
+  height: DESIGN_HEIGHT + HUD_H,      // + HUD strip
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
   scene: [BootScene, PreloadScene, MenuScene, InstructionsScene, GameScene, UIScene, GameOverScene],
 });

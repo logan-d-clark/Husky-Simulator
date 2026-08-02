@@ -295,7 +295,14 @@ export class GameScene extends Phaser.Scene {
       this.tileSprites[r] = [];
       for (let c = 0; c < this.map.cols; c++) {
         const tile = this.map.tiles[r][c];
-        const key = tile.type; // 'grass'|'pavement'|'house'|'water' match texture keys
+        // House blocks span many tiles: the street-facing bottom edge (no house
+        // below it) renders as a façade; every other house tile is roof. Grass/
+        // pavement/water keys match their tile type directly.
+        let key: string = tile.type;
+        if (tile.type === 'house') {
+          const below = this.map.tiles[r + 1]?.[c];
+          key = below && below.type === 'house' ? 'house-roof' : 'house-front';
+        }
         const img = this.add.image(c * T, r * T, key).setOrigin(0, 0);
         if (tile.type === 'grass') img.setTint(this.grassColor(tile));
         this.tileSprites[r][c] = img;

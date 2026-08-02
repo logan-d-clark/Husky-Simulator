@@ -1,5 +1,8 @@
 export const GRID = { ROWS: 26, COLS: 48, TILE: 28 } as const;
 
+export const DESIGN_WIDTH = 1344;   // 48 cols * 28px
+export const DESIGN_HEIGHT = 728;   // 26 rows * 28px
+
 export const FOOD_RATE = 0.1;
 export const WATER_RATE = 0.1;
 export const TREAT_VALUE = 10;
