@@ -12,13 +12,16 @@ export class PreloadScene extends Phaser.Scene {
     svg('grass', new URL('../assets/grass.svg', import.meta.url).href, 28, 28);
     svg('pavement', new URL('../assets/pavement.svg', import.meta.url).href, 28, 28);
     svg('house-roof', new URL('../assets/house-roof.svg', import.meta.url).href, 28, 28);
-    svg('house-front', new URL('../assets/house-front.svg', import.meta.url).href, 28, 28);
+    svg('house-front-door', new URL('../assets/house-front-door.svg', import.meta.url).href, 28, 28);
+    svg('house-front-window', new URL('../assets/house-front-window.svg', import.meta.url).href, 28, 28);
+    svg('house-front-bare', new URL('../assets/house-front-bare.svg', import.meta.url).href, 28, 28);
     svg('water', new URL('../assets/water.svg', import.meta.url).href, 28, 28);
     svg('fenceH', new URL('../assets/fence-h.svg', import.meta.url).href, 28, 4);
     svg('fenceV', new URL('../assets/fence-v.svg', import.meta.url).href, 4, 28);
-    svg('treat', new URL('../assets/treat.svg', import.meta.url).href, 16, 16);
-    svg('bowl', new URL('../assets/bowl.svg', import.meta.url).href, 18, 18);
-    svg('bag', new URL('../assets/bag.svg', import.meta.url).href, 18, 20);
+    // Food uses the original pixel-art PNGs from V1 (not the refactor's SVGs).
+    this.load.image('treat', new URL('../assets/treat.png', import.meta.url).href);
+    this.load.image('bowl', new URL('../assets/bowl.png', import.meta.url).href);
+    this.load.image('bag', new URL('../assets/bag.png', import.meta.url).href);
 
     for (const d of DIRS) {
       svg(`husky-${d}-0`, new URL(`../assets/husky-${d}-0.svg`, import.meta.url).href, 24, 24);
@@ -31,5 +34,11 @@ export class PreloadScene extends Phaser.Scene {
     }
   }
 
-  create() { this.scene.start('Menu'); }
+  create() {
+    // Keep the pixel-art food crisp (no bilinear smoothing).
+    for (const k of ['treat', 'bowl', 'bag']) {
+      this.textures.get(k).setFilter(Phaser.Textures.FilterMode.NEAREST);
+    }
+    this.scene.start('Menu');
+  }
 }

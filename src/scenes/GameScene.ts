@@ -16,6 +16,7 @@ import type { Direction, TileCoord } from '../types';
 import { takeFoodAt, type Food } from '../entities/Food';
 import { getDifficultySettings, DEFAULT_DIFFICULTY, type Difficulty } from '../config/difficulty';
 import { attachDevPanel } from '../ui/DevPanel';
+import { assignHouseFaces } from '../world/houseFacades';
 
 export class GameScene extends Phaser.Scene {
   private map!: GameMap;
@@ -297,17 +298,20 @@ export class GameScene extends Phaser.Scene {
 
   private renderMap() {
     const T = GRID.TILE;
+    // Per-house facade assignment: roof for interior, one door per house (none
+    // for bottom-of-map houses), remaining facade tiles bare/windowed.
+    const faces = assignHouseFaces(this.map);
+    const FACE_TEXTURE: Record<string, string> = {
+      roof: 'house-roof', door: 'house-front-door', window: 'house-front-window', bare: 'house-front-bare',
+    };
     for (let r = 0; r < this.map.rows; r++) {
       this.tileSprites[r] = [];
       for (let c = 0; c < this.map.cols; c++) {
         const tile = this.map.tiles[r][c];
-        // House blocks span many tiles: the street-facing bottom edge (no house
-        // below it) renders as a façade; every other house tile is roof. Grass/
-        // pavement/water keys match their tile type directly.
+        // Grass/pavement/water keys match their tile type directly.
         let key: string = tile.type;
         if (tile.type === 'house') {
-          const below = this.map.tiles[r + 1]?.[c];
-          key = below && below.type === 'house' ? 'house-roof' : 'house-front';
+          key = FACE_TEXTURE[faces.get(`${c},${r}`) ?? 'roof'];
         }
         const img = this.add.image(c * T, r * T, key).setOrigin(0, 0);
         if (tile.type === 'grass') img.setTint(this.grassColor(tile));
