@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { config, DEFAULTS, INIT_ONLY_KEYS, resetConfig, applyConfig, serializeConfig } from '../src/config/gameConfig';
+import { config, DEFAULTS, INIT_ONLY_KEYS, resetConfig, applyConfig, serializeConfig, parseConfig } from '../src/config/gameConfig';
 
 afterEach(() => resetConfig());
 
@@ -42,6 +42,22 @@ describe('gameConfig', () => {
     it('reflects live edits', () => {
       applyConfig({ FOOD_RATE: 0.42 });
       expect(serializeConfig()).toContain('FOOD_RATE=0.42');
+    });
+  });
+
+  describe('parseConfig', () => {
+    it('round-trips a serialized config', () => {
+      applyConfig({ FOOD_RATE: 0.42, START_FOOD: 200, GAME_SECONDS: 90 });
+      const text = serializeConfig();
+      resetConfig();
+      const parsed = parseConfig(text);
+      expect(parsed.FOOD_RATE).toBe(0.42);
+      expect(parsed.START_FOOD).toBe(200);
+      expect(parsed.GAME_SECONDS).toBe(90);
+    });
+    it('ignores unknown keys and malformed lines', () => {
+      const parsed = parseConfig('FOOD_RATE=0.9\nBOGUS_KEY=5\ngarbage line\nWATER_RATE=abc');
+      expect(parsed).toEqual({ FOOD_RATE: 0.9 });
     });
   });
 });

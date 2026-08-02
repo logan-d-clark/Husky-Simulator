@@ -100,3 +100,16 @@ export function serializeConfig(c: GameConfig = config): string {
     .map((k) => `${k}=${c[k]}`)
     .join('\n') + '\n';
 }
+
+/** Parse `KEY=value` text (as produced by serializeConfig) into a partial patch,
+ *  keeping only known numeric config keys — the inverse used when importing a
+ *  saved config file. */
+export function parseConfig(text: string): Partial<GameConfig> {
+  const known = new Set(Object.keys(DEFAULTS));
+  const out: Partial<GameConfig> = {};
+  for (const line of text.split('\n')) {
+    const m = line.match(/^\s*([A-Za-z_]+)\s*=\s*(-?\d+(?:\.\d+)?)\s*$/);
+    if (m && known.has(m[1])) out[m[1] as keyof GameConfig] = parseFloat(m[2]);
+  }
+  return out;
+}
