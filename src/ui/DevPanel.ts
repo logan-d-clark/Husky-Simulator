@@ -1,12 +1,20 @@
 import Phaser from 'phaser';
 import {
-  config, DEFAULTS, INIT_ONLY_KEYS, applyConfig, resetConfig, serializeConfig, type GameConfig,
+  config, DEFAULTS, INIT_ONLY_KEYS, applyConfig, resetConfig, serializeConfig, parseConfig, type GameConfig,
 } from '../config/gameConfig';
 
 const KEYS = Object.keys(DEFAULTS) as (keyof GameConfig)[];
+const PROFILES_KEY = 'husky-dev-profiles';
 
 function applyStyle(el: HTMLElement, styles: Partial<CSSStyleDeclaration>): void {
   Object.assign(el.style, styles);
+}
+
+function loadProfiles(): Record<string, Partial<GameConfig>> {
+  try { return JSON.parse(localStorage.getItem(PROFILES_KEY) ?? '{}'); } catch { return {}; }
+}
+function saveProfiles(p: Record<string, Partial<GameConfig>>): void {
+  try { localStorage.setItem(PROFILES_KEY, JSON.stringify(p)); } catch { /* storage unavailable */ }
 }
 
 // A dev-only HTML overlay for live-tuning the runtime config. Sits above the
@@ -16,9 +24,10 @@ function applyStyle(el: HTMLElement, styles: Partial<CSSStyleDeclaration>): void
 export class DevPanel {
   private root: HTMLDivElement;
   private inputs = new Map<keyof GameConfig, HTMLInputElement>();
+  private profileSelect!: HTMLSelectElement;
   private open = false;
 
-  constructor() {
+  constructor(private opts: { onRestart?: () => void } = {}) {
     this.root = document.createElement('div');
     // Docked to the window's left edge so it sits in the left letterbox strip
     // beside the map. Visible by default in dev mode; backtick toggles it.
@@ -45,13 +54,94 @@ export class DevPanel {
 
     for (const key of KEYS) this.root.appendChild(this.buildRow(key));
 
-    const buttons = document.createElement('div');
-    applyStyle(buttons, { display: 'flex', gap: '6px', marginTop: '10px' });
-    buttons.append(
-      this.button('Reset', () => { resetConfig(); this.syncInputs(); }),
+    const resets = this.buttonRow(
+      this.button('Reset to Defaults', () => { resetConfig(); this.syncInputs(); }),
+      this.button('Restart Game', () => this.opts.onRestart?.()),
+    );
+    const files = this.buttonRow(
+      this.button('Import .txt', () => this.importFile()),
       this.button('Save .txt', () => this.save()),
     );
-    this.root.appendChild(buttons);
+    this.root.append(resets, files, this.buildProfiles());
+  }
+
+  private buttonRow(...children: HTMLElement[]): HTMLDivElement {
+    const row = document.createElement('div');
+    applyStyle(row, { display: 'flex', gap: '6px', marginTop: '8px' });
+    row.append(...children);
+    return row;
+  }
+
+  // Save/load named config profiles (persisted to localStorage) so several
+  // tuning setups can be kept and swapped between for comparison.
+  private buildProfiles(): HTMLDivElement {
+    const wrap = document.createElement('div');
+    applyStyle(wrap, { marginTop: '10px', borderTop: '1px solid #4a423a', paddingTop: '8px' });
+    const label = document.createElement('div');
+    label.textContent = 'PROFILES';
+    applyStyle(label, { color: '#ffd27f', fontWeight: 'bold', marginBottom: '4px' });
+
+    this.profileSelect = document.createElement('select');
+    applyStyle(this.profileSelect, {
+      width: '100%', background: '#1a1613', color: '#f2ede0', border: '1px solid #555',
+      borderRadius: '4px', padding: '3px', marginBottom: '6px',
+    });
+    this.profileSelect.addEventListener('change', () => {
+      const name = this.profileSelect.value;
+      if (!name) return;
+      const prof = loadProfiles()[name];
+      if (prof) { applyConfig(prof); this.syncInputs(); }
+    });
+    this.refreshProfiles();
+
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.placeholder = 'profile name';
+    applyStyle(nameInput, {
+      flex: '1', minWidth: '0', background: '#1a1613', color: '#f2ede0',
+      border: '1px solid #555', borderRadius: '4px', padding: '3px',
+    });
+    const saveBtn = this.button('Save', () => {
+      const name = nameInput.value.trim();
+      if (!name) return;
+      const profiles = loadProfiles();
+      profiles[name] = { ...config };
+      saveProfiles(profiles);
+      nameInput.value = '';
+      this.refreshProfiles(name);
+    });
+    const row = document.createElement('div');
+    applyStyle(row, { display: 'flex', gap: '6px' });
+    row.append(nameInput, saveBtn);
+
+    wrap.append(label, this.profileSelect, row);
+    return wrap;
+  }
+
+  private refreshProfiles(selected = ''): void {
+    const names = Object.keys(loadProfiles());
+    this.profileSelect.innerHTML = '';
+    const ph = document.createElement('option');
+    ph.value = ''; ph.textContent = names.length ? '— load profile —' : '(no profiles yet)';
+    this.profileSelect.append(ph);
+    for (const n of names) {
+      const o = document.createElement('option');
+      o.value = n; o.textContent = n;
+      this.profileSelect.append(o);
+    }
+    this.profileSelect.value = selected;
+  }
+
+  private importFile(): void {
+    const picker = document.createElement('input');
+    picker.type = 'file';
+    picker.accept = '.txt,text/plain';
+    picker.addEventListener('change', () => {
+      const file = picker.files?.[0];
+      if (!file) return;
+      file.text().then((text) => { applyConfig(parseConfig(text)); this.syncInputs(); });
+    });
+    picker.click();
   }
 
   private buildRow(key: keyof GameConfig): HTMLLabelElement {
@@ -115,8 +205,8 @@ export class DevPanel {
 
 // Wire a dev panel to a scene: create it, toggle on backtick, tear it down when
 // the scene shuts down. Keeps the Phaser lifecycle glue out of the scene body.
-export function attachDevPanel(scene: Phaser.Scene): DevPanel {
-  const panel = new DevPanel();
+export function attachDevPanel(scene: Phaser.Scene, opts: { onRestart?: () => void } = {}): DevPanel {
+  const panel = new DevPanel(opts);
   scene.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.BACKTICK)
     .on('down', () => panel.toggle());
   scene.events.once('shutdown', () => panel.destroy());

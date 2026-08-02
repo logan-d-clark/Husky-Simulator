@@ -31,6 +31,7 @@ export class GameScene extends Phaser.Scene {
   private chiMoving = false;
   private chiSpeedMultiplier = getDifficultySettings(DEFAULT_DIFFICULTY).chiSpeedMultiplier;
   private devMode = false;
+  private difficulty: Difficulty = DEFAULT_DIFFICULTY;
   private fogOfWar = false;
   private fovSet: Set<string> | null = null; // Blizzlord field-of-view; null = full visibility
   private ownerRegistry!: OwnerRegistry;
@@ -52,10 +53,19 @@ export class GameScene extends Phaser.Scene {
   // Phaser runs init(data) before create() on every scene.start, so the
   // difficulty chosen on the menu is resolved here (default Normal if absent).
   init(data?: { difficulty?: Difficulty; devMode?: boolean }) {
-    const settings = getDifficultySettings(data?.difficulty ?? DEFAULT_DIFFICULTY);
+    this.difficulty = data?.difficulty ?? DEFAULT_DIFFICULTY;
+    const settings = getDifficultySettings(this.difficulty);
     this.chiSpeedMultiplier = settings.chiSpeedMultiplier;
     this.fogOfWar = settings.fogOfWar;
     this.devMode = data?.devMode ?? false;
+  }
+
+  // Dev "Restart Game": reboot the round from scratch (fresh map, scores, and
+  // positions), keeping the current difficulty and dev mode. Tuned config and
+  // saved profiles persist (they live outside the scene).
+  private restartGame() {
+    this.scene.stop('UI');
+    this.scene.restart({ difficulty: this.difficulty, devMode: true });
   }
 
   create() {
@@ -100,7 +110,7 @@ export class GameScene extends Phaser.Scene {
     if (this.fogOfWar) this.applyFov();
 
     // Dev mode: live config panel (backtick-toggled, self-teardown on shutdown).
-    if (this.devMode) attachDevPanel(this);
+    if (this.devMode) attachDevPanel(this, { onRestart: () => this.restartGame() });
   }
 
   // Recompute Blizzard's field of view and reflect it: grey out-of-sight tiles,
