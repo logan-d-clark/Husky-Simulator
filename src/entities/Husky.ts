@@ -6,5 +6,4 @@ export class Husky {
   tile: TileCoord = { ...HUSKY_START_TILE };
   facing: Direction = 'left';
   inv: Inventory = { food: config.START_FOOD, water: config.START_WATER, poop: 0, pee: 0 };
-  treatsEaten = 0;
 }

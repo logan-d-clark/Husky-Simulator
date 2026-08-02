@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { PALETTE } from '../config/palette';
 import { HUSKY_NAME, CHI_NAME } from '../config/names';
 
-interface Gmeta { reason: 'Time' | 'Food' | 'Water'; huskyTreats: number; chiTreats: number; }
+interface Gmeta { reason: 'Time' | 'Food' | 'Water'; huskyFood: number; chiFood: number; }
 
 export class GameOverScene extends Phaser.Scene {
   private meta!: Gmeta;
@@ -18,9 +18,9 @@ export class GameOverScene extends Phaser.Scene {
     };
     this.add.text(cx, 140, 'Game Over', { fontSize: '48px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5);
     this.add.text(cx, 210, reasonText[this.meta.reason], { fontSize: '24px', color: '#ffffff' }).setOrigin(0.5);
-    const won = this.meta.huskyTreats >= this.meta.chiTreats;
-    this.add.text(cx, 290, `${HUSKY_NAME} gathered ${this.meta.huskyTreats} treats`, { fontSize: '26px', color: '#ffffff' }).setOrigin(0.5);
-    this.add.text(cx, 330, `${CHI_NAME} got ${this.meta.chiTreats}`, { fontSize: '20px', color: '#dddddd' }).setOrigin(0.5);
+    const won = this.meta.huskyFood >= this.meta.chiFood;
+    this.add.text(cx, 290, `${HUSKY_NAME} finished with ${this.meta.huskyFood.toFixed(0)} food`, { fontSize: '26px', color: '#ffffff' }).setOrigin(0.5);
+    this.add.text(cx, 330, `${CHI_NAME} finished with ${this.meta.chiFood.toFixed(0)}`, { fontSize: '20px', color: '#dddddd' }).setOrigin(0.5);
     this.add.text(cx, 380, won ? `${HUSKY_NAME} wins! 🏆` : `${CHI_NAME} won this time…`, { fontSize: '28px', color: won ? '#ffd27f' : '#ff8a8a' }).setOrigin(0.5);
     const btn = (y: number, label: string, fn: () => void) => {
       const t = this.add.text(cx, y, label, { fontSize: '26px', color: PALETTE.hudText, backgroundColor: PALETTE.grassBase, padding: { x: 18, y: 8 } })
