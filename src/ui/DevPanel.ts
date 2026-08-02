@@ -20,16 +20,18 @@ export class DevPanel {
 
   constructor() {
     this.root = document.createElement('div');
+    // Docked to the window's left edge so it sits in the left letterbox strip
+    // beside the map. Visible by default in dev mode; backtick toggles it.
     applyStyle(this.root, {
-      position: 'fixed', top: '12px', right: '12px', zIndex: '9999',
-      width: '290px', maxHeight: '92vh', overflowY: 'auto', boxSizing: 'border-box',
+      position: 'fixed', top: '8px', left: '6px', zIndex: '9999',
+      width: '208px', maxHeight: '96vh', overflowY: 'auto', boxSizing: 'border-box',
       background: 'rgba(36,31,27,0.96)', color: '#f2ede0',
-      font: '12px monospace', padding: '10px', borderRadius: '10px',
+      font: '11px monospace', padding: '8px', borderRadius: '10px',
       border: '1px solid rgba(242,237,224,0.2)', boxShadow: '0 6px 24px rgba(0,0,0,0.45)',
     });
     this.build();
     document.body.appendChild(this.root);
-    this.setOpen(false);
+    this.setOpen(true);
   }
 
   private build(): void {
@@ -64,8 +66,8 @@ export class DevPanel {
     input.step = 'any';
     input.value = String(config[key]);
     applyStyle(input, {
-      width: '92px', background: '#1a1613', color: '#f2ede0',
-      border: '1px solid #555', borderRadius: '4px', padding: '2px 4px',
+      width: '58px', background: '#1a1613', color: '#f2ede0',
+      border: '1px solid #555', borderRadius: '4px', padding: '2px 3px',
     });
     input.addEventListener('change', () => {
       const v = parseFloat(input.value);
