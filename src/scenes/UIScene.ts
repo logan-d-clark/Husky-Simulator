@@ -100,7 +100,7 @@ export class UIScene extends Phaser.Scene {
     // Header
     const mm = Math.floor(s.secondsLeft / 60), ss = s.secondsLeft % 60;
     this.texts.timer.setText(`⏰ ${mm}:${ss.toString().padStart(2, '0')}`);
-    this.texts.score.setText(`🐺 ${HUSKY_NAME} ${s.huskyTreats}     🐕 ${CHI_NAME} ${s.chiTreats}`);
+    this.texts.score.setText(`🐺 ${HUSKY_NAME} ${s.huskyFood.toFixed(0)}     🐕 ${CHI_NAME} ${s.chiFood.toFixed(0)}`);
 
     // Current Space — friendly indicators for the tile under Blizzard.
     this.texts.owner.setText(`🏠 ${info.name}`);

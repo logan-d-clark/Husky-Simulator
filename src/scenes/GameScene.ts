@@ -102,7 +102,7 @@ export class GameScene extends Phaser.Scene {
       food: this.husky.inv.food, water: this.husky.inv.water,
       poop: this.husky.inv.poop, pee: this.husky.inv.pee,
       secondsLeft: this.secondsLeft,
-      huskyTreats: this.husky.treatsEaten, chiTreats: this.chihuahua.treatsEaten,
+      huskyFood: this.husky.inv.food, chiFood: this.chihuahua.food,
       currentTile: { heat: t.heat, dirt: t.dirt, destruction: t.destruction, ownerId: t.ownerId },
     };
   }
@@ -168,6 +168,7 @@ export class GameScene extends Phaser.Scene {
     this.chihuahua.facing = dir;
     const to = this.grid.neighbor(this.chihuahua.tile, dir);
     this.chihuahua.tile = to;
+    this.chihuahua.food = Math.max(0, this.chihuahua.food - config.FOOD_RATE); // digestion
     this.chiMoving = true;
     this.advanceEntity(this.chiSprite, to, this.step * this.chiSpeedMultiplier, () => {
       this.chiMoving = false; this.chiEat(); this.tryChiStep();
@@ -252,15 +253,15 @@ export class GameScene extends Phaser.Scene {
     this.scene.stop('UI');
     this.scene.start('GameOver', {
       reason,
-      huskyTreats: this.husky.treatsEaten,
-      chiTreats: this.chihuahua.treatsEaten,
+      huskyFood: this.husky.inv.food,
+      chiFood: this.chihuahua.food,
     });
   }
 
   private chiEat() {
     const food = takeFoodAt(this.foods, this.chihuahua.tile.col, this.chihuahua.tile.row);
     if (food) {
-      this.chihuahua.treatsEaten += 1;
+      this.chihuahua.food += food.value;
       this.map.tiles[food.tile.row][food.tile.col].foodPresent = false;
       const key = this.fkey(food.tile.col, food.tile.row);
       this.foodSprites.get(key)?.destroy();
@@ -277,7 +278,6 @@ export class GameScene extends Phaser.Scene {
     const food = takeFoodAt(this.foods, this.husky.tile.col, this.husky.tile.row);
     if (food) {
       ResourceSystem.eatFood(this.husky.inv, food.value);
-      this.husky.treatsEaten += 1;
       this.currentTile().foodPresent = false;
       const key = this.fkey(food.tile.col, food.tile.row);
       this.foodSprites.get(key)?.destroy();
