@@ -1,26 +1,70 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { parseMap } from '../../src/world/MapParser';
 import { Grid } from '../../src/world/Grid';
-import { AISystem } from '../../src/systems/AISystem';
+import {
+  nextBanditMove, bestSmelledFood, smellRadius, isThirsty, bladderFull, patrolDir, type Bandit,
+} from '../../src/systems/AISystem';
+import { config, resetConfig } from '../../src/config/gameConfig';
 import type { Food } from '../../src/entities/Food';
+import type { Inventory } from '../../src/types';
 
-// 1x5 open grass corridor
-const grid = new Grid(parseMap('G0,G0,G0,G0,G0'));
+afterEach(() => resetConfig());
 
-describe('AISystem.nextStep', () => {
-  it('steps toward the only food to the right', () => {
+const fullInv = (): Inventory => ({ food: 50, water: 50, poop: 0, pee: 0 });
+const bandit = (col: number, over: Partial<Bandit> = {}): Bandit =>
+  ({ tile: { col, row: 0 }, inv: fullInv(), facing: 'right', ...over });
+
+// 1x13 open grass corridor.
+const grid = new Grid(parseMap(Array(13).fill('G0').join(',')));
+
+describe('smellRadius', () => {
+  it('bag > bowl > treat', () => {
+    expect(smellRadius('bag')).toBe(config.SMELL_BAG);
+    expect(smellRadius('bowl')).toBe(config.SMELL_BOWL);
+    expect(smellRadius('treat')).toBe(config.SMELL_TREAT);
+    expect(config.SMELL_BAG).toBeGreaterThan(config.SMELL_BOWL);
+    expect(config.SMELL_BOWL).toBeGreaterThan(config.SMELL_TREAT);
+  });
+});
+
+describe('bestSmelledFood', () => {
+  it('ignores food beyond its smell radius', () => {
+    const foods: Food[] = [{ type: 'treat', value: 10, tile: { col: 10, row: 0 } }]; // dist 10 > SMELL_TREAT(5)
+    expect(bestSmelledFood({ col: 0, row: 0 }, foods)).toBeNull();
+  });
+  it('prefers a distant high-value bag over a near treat by value/distance', () => {
+    const treat: Food = { type: 'treat', value: 10, tile: { col: 3, row: 0 } }; // 10/4 = 2.5
+    const bag: Food = { type: 'bag', value: 40, tile: { col: 10, row: 0 } };     // 40/11 = 3.6, within SMELL_BAG(12)
+    const pick = bestSmelledFood({ col: 0, row: 0 }, [treat, bag]);
+    expect(pick).toBe(bag);
+  });
+});
+
+describe('needs thresholds', () => {
+  it('isThirsty below 30% of water cap', () => {
+    expect(isThirsty({ food: 50, water: config.WATER_CAP * 0.2, poop: 0, pee: 0 })).toBe(true);
+    expect(isThirsty({ food: 50, water: config.WATER_CAP * 0.9, poop: 0, pee: 0 })).toBe(false);
+  });
+  it('bladderFull near the poop/pee caps', () => {
+    expect(bladderFull({ food: 50, water: 50, poop: config.POOP_MAX, pee: 0 })).toBe(true);
+    expect(bladderFull({ food: 50, water: 50, poop: 0, pee: config.PEE_MAX })).toBe(true);
+    expect(bladderFull({ food: 50, water: 50, poop: 0, pee: 0 })).toBe(false);
+  });
+});
+
+describe('nextBanditMove', () => {
+  it('heads toward the only smelled food', () => {
     const foods: Food[] = [{ type: 'treat', value: 10, tile: { col: 4, row: 0 } }];
-    expect(AISystem.nextStep(grid, { col: 0, row: 0 }, foods)).toBe('right');
+    expect(nextBanditMove(grid, bandit(0), foods, () => 0)).toBe('right');
   });
-  it('steps toward the nearer of two foods', () => {
-    const foods: Food[] = [
-      { type: 'treat', value: 10, tile: { col: 0, row: 0 } },
-      { type: 'treat', value: 10, tile: { col: 4, row: 0 } },
-    ];
-    // starting at col 1, nearest is col 0 -> left
-    expect(AISystem.nextStep(grid, { col: 1, row: 0 }, foods)).toBe('left');
+  it('patrols (a valid direction) when nothing is smelled and not thirsty', () => {
+    const dir = nextBanditMove(grid, bandit(5), [], () => 0);
+    expect(['left', 'right']).toContain(dir); // up/down blocked on a 1-row corridor
   });
-  it('returns null when no food', () => {
-    expect(AISystem.nextStep(grid, { col: 0, row: 0 }, [])).toBeNull();
+});
+
+describe('patrolDir', () => {
+  it('returns an open direction', () => {
+    expect(['left', 'right']).toContain(patrolDir(grid, { col: 5, row: 0 }, 'right', () => 0.9));
   });
 });

@@ -9,7 +9,7 @@ import { Husky } from '../entities/Husky';
 import { Chihuahua } from '../entities/Chihuahua';
 import { ResourceSystem } from '../systems/ResourceSystem';
 import { WorldActions } from '../systems/WorldActions';
-import { AISystem } from '../systems/AISystem';
+import { nextBanditMove, isThirsty, isWaterAdjacent } from '../systems/AISystem';
 import { OwnerRegistry, dispenseOverMap } from '../systems/OwnerRegistry';
 import { createBadges, updateBadges, type Badge } from '../ui/HouseholdProfile';
 import type { Direction, TileCoord } from '../types';
@@ -102,7 +102,7 @@ export class GameScene extends Phaser.Scene {
       food: this.husky.inv.food, water: this.husky.inv.water,
       poop: this.husky.inv.poop, pee: this.husky.inv.pee,
       secondsLeft: this.secondsLeft,
-      huskyFood: this.husky.inv.food, chiFood: this.chihuahua.food,
+      huskyFood: this.husky.inv.food, chiFood: this.chihuahua.inv.food,
       currentTile: { heat: t.heat, dirt: t.dirt, destruction: t.destruction, ownerId: t.ownerId },
     };
   }
@@ -163,15 +163,16 @@ export class GameScene extends Phaser.Scene {
   // onArrive to sustain the glide.
   private tryChiStep() {
     if (this.over || this.chiMoving) return;
-    const dir = AISystem.nextStep(this.grid, this.chihuahua.tile, this.foods);
+    const dir = nextBanditMove(this.grid, this.chihuahua, this.foods, Math.random);
     if (!dir) return;
     this.chihuahua.facing = dir;
     const to = this.grid.neighbor(this.chihuahua.tile, dir);
     this.chihuahua.tile = to;
-    this.chihuahua.food = Math.max(0, this.chihuahua.food - config.FOOD_RATE); // digestion
+    ResourceSystem.applyMoveCost(this.chihuahua.inv); // food/water down, poop/pee up (min 0 food is fine — no death)
+    this.chihuahua.inv.food = Math.max(0, this.chihuahua.inv.food);
     this.chiMoving = true;
     this.advanceEntity(this.chiSprite, to, this.step * this.chiSpeedMultiplier, () => {
-      this.chiMoving = false; this.chiEat(); this.tryChiStep();
+      this.chiMoving = false; this.onChiEnterTile(); this.tryChiStep();
     });
   }
 
@@ -233,10 +234,15 @@ export class GameScene extends Phaser.Scene {
       this.foodSprites.set(this.fkey(food.tile.col, food.tile.row), spr);
     });
 
-    // 5) chihuahua AI — kick from rest; continuous tile-to-tile gliding is
-    //    driven by each tween's onArrive (see tryChiStep), so there is no
-    //    per-step pause. Speed is difficulty-driven (step * chiSpeedMultiplier).
+    // 5) chihuahua (Bandit) AI — kick from rest; continuous gliding is driven by
+    //    each tween's onArrive (see tryChiStep). Bandit shares Blizzard's needs:
+    //    heat every tick, and drinking when thirsty next to water.
     this.tryChiStep();
+    const chiTile = this.map.tiles[this.chihuahua.tile.row][this.chihuahua.tile.col];
+    ResourceSystem.applyHeat(this.chihuahua.inv, chiTile.heat);
+    if (isThirsty(this.chihuahua.inv) && isWaterAdjacent(this.grid, this.chihuahua.tile)) {
+      ResourceSystem.drink(this.chihuahua.inv);
+    }
     this.chiSprite.setTexture(`chi-${this.chihuahua.facing}-${Math.floor(performance.now() / 160) % 2}`);
 
     // 6) sim-time / game-over. Dev mode freezes the clock and is invincible.
@@ -254,19 +260,23 @@ export class GameScene extends Phaser.Scene {
     this.scene.start('GameOver', {
       reason,
       huskyFood: this.husky.inv.food,
-      chiFood: this.chihuahua.food,
+      chiFood: this.chihuahua.inv.food,
     });
   }
 
-  private chiEat() {
+  private onChiEnterTile() {
+    // Eat any food on this tile...
     const food = takeFoodAt(this.foods, this.chihuahua.tile.col, this.chihuahua.tile.row);
     if (food) {
-      this.chihuahua.food += food.value;
+      ResourceSystem.eatFood(this.chihuahua.inv, food.value);
       this.map.tiles[food.tile.row][food.tile.col].foodPresent = false;
       const key = this.fkey(food.tile.col, food.tile.row);
       this.foodSprites.get(key)?.destroy();
       this.foodSprites.delete(key);
     }
+    // ...and relieve himself when full, dropping the yard's affection like Blizzard.
+    const tile = this.map.tiles[this.chihuahua.tile.row][this.chihuahua.tile.col];
+    WorldActions.autoDump(this.chihuahua, tile, this.ownerRegistry.get(tile.ownerId));
   }
 
   private fkey(c: number, r: number) { return `${c},${r}`; }
