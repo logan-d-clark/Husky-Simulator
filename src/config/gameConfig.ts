@@ -34,6 +34,9 @@ export interface GameConfig {
   HEAT_PAVEMENT: number;
   HEAT_GRASS: number;
   GAME_SECONDS: number;
+  SMELL_TREAT: number; // Bandit's smell radius (tiles) per food type
+  SMELL_BOWL: number;
+  SMELL_BAG: number;
 }
 
 // Frozen baseline — every value verbatim from the original constants.
@@ -65,6 +68,9 @@ export const DEFAULTS: Readonly<GameConfig> = Object.freeze({
   HEAT_PAVEMENT: 0.05,
   HEAT_GRASS: 0.01,
   GAME_SECONDS: 20 * 60, // V1 TIME_MAX = 20 minutes
+  SMELL_TREAT: 5,
+  SMELL_BOWL: 8,
+  SMELL_BAG: 12,
 });
 
 // The live config every consumer reads from. Starts at defaults.
