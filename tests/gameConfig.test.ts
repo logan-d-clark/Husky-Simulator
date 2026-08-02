@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { config, DEFAULTS, resetConfig, applyConfig, serializeConfig } from '../src/config/gameConfig';
+import { config, DEFAULTS, INIT_ONLY_KEYS, resetConfig, applyConfig, serializeConfig } from '../src/config/gameConfig';
 
 afterEach(() => resetConfig());
 
@@ -23,6 +23,12 @@ describe('gameConfig', () => {
 
   it('DEFAULTS is frozen (a durable baseline to restore from)', () => {
     expect(Object.isFrozen(DEFAULTS)).toBe(true);
+  });
+
+  it('every INIT_ONLY key is a real config field', () => {
+    for (const key of INIT_ONLY_KEYS) {
+      expect(DEFAULTS).toHaveProperty(key);
+    }
   });
 
   describe('serializeConfig', () => {

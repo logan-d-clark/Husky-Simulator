@@ -1,8 +1,10 @@
 // Mutable runtime game config. All numeric gameplay tunables live here so dev
-// mode can adjust them on the fly; consumers must read `config.X` at call-time
-// (never destructure at import) so live edits take effect. Structural values
-// that can't change mid-run (grid size, sim rate, canvas dims, start tile) stay
-// in constants.ts.
+// mode can adjust them; consumers must read `config.X` at call-time (never
+// destructure at import). Most fields are read live each tick and take effect
+// immediately; the fields in INIT_ONLY_KEYS are captured once at game start
+// (map parse / entity spawn / clock init) and only take effect on the next
+// game start. Structural values that can't change mid-run (grid size, sim
+// rate, canvas dims, start tile) stay in constants.ts.
 
 export interface GameConfig {
   FOOD_RATE: number;
@@ -67,6 +69,13 @@ export const DEFAULTS: Readonly<GameConfig> = Object.freeze({
 
 // The live config every consumer reads from. Starts at defaults.
 export const config: GameConfig = { ...DEFAULTS };
+
+// Fields baked in at game start rather than read live each tick — editing them
+// applies on the NEXT game start: heat is baked into tiles at map parse,
+// GAME_SECONDS seeds the clock, and START_* seed the husky's inventory.
+export const INIT_ONLY_KEYS: ReadonlySet<keyof GameConfig> = new Set<keyof GameConfig>([
+  'HEAT_GRASS', 'HEAT_PAVEMENT', 'GAME_SECONDS', 'START_FOOD', 'START_WATER',
+]);
 
 /** Restore every field to its DEFAULTS value (mutates in place). */
 export function resetConfig(): void {
