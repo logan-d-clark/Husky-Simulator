@@ -32,9 +32,13 @@ export class UIScene extends Phaser.Scene {
       .fillRect(0, y0, W, HUD_H);
     panel.fillStyle(Phaser.Display.Color.HexStringToColor(PALETTE.treat).color, 1)
       .fillRect(0, y0, W, 4);
-    // Current Space gets its own inset card so it reads as a distinct subsection.
-    panel.fillStyle(0xffffff, 0.05).fillRoundedRect(CS_X - 12, y0 + 30, W - (CS_X - 12) - 20, HUD_H - 42, 10);
-    panel.lineStyle(1, cream, 0.15).strokeRoundedRect(CS_X - 12, y0 + 30, W - (CS_X - 12) - 20, HUD_H - 42, 10);
+    // Blizzard and Current Space each get their own matching inset card.
+    const card = (x: number, w: number) => {
+      panel.fillStyle(0xffffff, 0.05).fillRoundedRect(x, y0 + 30, w, HUD_H - 42, 10);
+      panel.lineStyle(1, cream, 0.15).strokeRoundedRect(x, y0 + 30, w, HUD_H - 42, 10);
+    };
+    card(12, 346);                                   // Blizzard
+    card(CS_X - 12, W - (CS_X - 12) - 20);           // Current Space
 
     this.g = this.add.graphics();
 
@@ -47,8 +51,8 @@ export class UIScene extends Phaser.Scene {
     // zone headers
     this.add.text(LEFT_X, y0 + 34, HUSKY_NAME.toUpperCase(), { color: '#ffd27f', fontSize: '13px', fontStyle: 'bold' });
     this.add.text(CS_X, y0 + 34, 'CURRENT SPACE', { color: '#ffd27f', fontSize: '13px', fontStyle: 'bold' });
-    // left zone (Blizzard)
-    mk('food', LEFT_X + 8, y0 + 60, '18px');
+    // left zone (Blizzard) — food matches the other stat rows' size
+    mk('food', LEFT_X, y0 + 62, '15px');
     mk('waterL', LEFT_X, y0 + 96);
     mk('poopL', LEFT_X, y0 + 122);
     mk('peeL', LEFT_X, y0 + 148);
@@ -80,14 +84,10 @@ export class UIScene extends Phaser.Scene {
       }
     };
 
-    // Food: unbounded count chip (no scale). Warns when low.
+    // Food: unbounded value (no bar/scale). Text reddens when low.
     const low = s.food < LOW_FOOD;
-    const chipW = 150, chipY = y0 + 56;
-    this.g.fillStyle(Phaser.Display.Color.HexStringToColor(low ? PALETTE.affection : PALETTE.treat).color, low ? 0.85 : 0.22)
-      .fillRoundedRect(LEFT_X, chipY, chipW, 26, 8);
-    this.g.lineStyle(1.5, Phaser.Display.Color.HexStringToColor(low ? PALETTE.affection : PALETTE.treat).color, 1)
-      .strokeRoundedRect(LEFT_X, chipY, chipW, 26, 8);
     this.texts.food.setText(`🍖 Food ${s.food.toFixed(0)}`);
+    this.texts.food.setColor(low ? PALETTE.affection : PALETTE.hudText);
 
     // Blizzard's own resource bars (water has a cap; poop/pee are need-to-go).
     bar(LEFT_BAR, y0 + 99, s.water, config.WATER_CAP, PALETTE.water);

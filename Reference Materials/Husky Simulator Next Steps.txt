@@ -1,0 +1,39 @@
+HUD: Put the blizzard section in its own container that matches the style of the current space container. 
+HUD: Make the food value and its associated text the same size as the water, poop, and pee values.
+
+Style: 
+- Prettify the start screen. 
+	> Make it look welcoming in a way that matches the art style of the game. (Currently, it's just white text and basic buttons on a green background.)
+	> Make it look modern with a clean button layout. (e.g. dev mode in the bottom corner; The other buttons laid out in an intuitive way; Button styling updated to look nicer)
+- For the food that appears on the map, switch it back from the custom svgs we made as part of the refactor to the pixel art versions from the original python game. (Can be found in Reference Materials\Husky Simulator v1)
+
+Style: For houses, make it so that:
+- Each house only has one facade tile with a door. The other facade tiles are either bare (no windows) or have windows.
+- Houses on the bottom of the map do NOT have a door tile in their facades (the front door for those houses is implied to be at the top of the house-- and not visible from our perspective.
+
+Points:
+- Currently, it seems like Blizzard and Bandit are scored on the raw number of food items they pick up (counting treats, bowls, and bags the same).
+- Instead, they should be scored on the amount of FOOD they accumulate (Accounting for the fact that bags and bowls are worth more)
+
+Bandit AI:
+- Give bandit the same heat/food/water/poop/pee constraints that blizzard does (i.e. he should need to go drink water occasionally, and needs to pee/poop as well)
+	> Because the neighbors can't distinguish between Blizzard and Bandit pooping on their yard, Bandit pooping or peeing somewhere lowers the like meter just as if Blizzard had peed or pooped there
+- In choosing where to go next, instead of just going to the nearest food item, instead have bandit factor in the value of nearby food items too.
+	> Should probably be something like a value by distance tradeoff (e.g. a bone 3 spots away might lose to a bag that's 10 spots away, since bag is higher value)
+- Also simulate Bandit having a nose (a max number of squares that he can smell)
+	> When he can't smell a nearby treat, he patrols until he smells one, then moves toward it.
+	> Larger/higher value foodss have a larger smell radius (e.g. he can smell a bag from farther away than a bowl)
+	> Make the smell ranges for each type of food configurable via the developer mode panel
+
+Difficulty:
+Rename the difficulty levels to "Puppy" (Subtitle = Normal), "Husky" (Hard), and "Blizzlord" (Very Hard)
+In Blizzlord mode:
+- Instead of having full top-down view of where every food item is on the map, and where Bandit currently is, Blizzard has a field of view (Infinite range, but blocked by fences and houses)
+- Areas of the map outside his field of view are still visible on the screen for navigation purposes, but they're greyed out until they enter Blizzard's field of view, and any food items (or Bandit) within them are not visible to the player.
+
+Dev Mode:
+- Add a button in the dev mode panel to import a previously-exported txt of dev settings and apply them to the game. Intent is to be able to try settings, export them, then easily try those same settings again later.
+- Add the ability to create or load multiple dev settings profiles at once, and toggle between them in the dev mode panel. Intent is to be able to load up three different settings profiles and swap between them to compare.
+- Add two reset buttons to the dev mode panel
+	> Reset to Defaults (Reset Dev settings to defaults)
+	> Restart Game (Restarts the game from the beginning-- clear map and scores, husky back to the starting location etc).
