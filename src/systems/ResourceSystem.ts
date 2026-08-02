@@ -16,10 +16,9 @@ export const ResourceSystem = {
     if (inv.water <= 0) return 'Water';
     return null;
   },
-  // Full end-of-game gate including the round timer. Dev mode makes the husky
-  // invincible AND freezes the clock, so the game never ends on its own.
-  shouldEndGame(inv: Inventory, secondsLeft: number, devMode: boolean): 'Time' | 'Food' | 'Water' | null {
-    if (devMode) return null;
+  // Full end-of-game gate including the round timer. (Dev mode's invincibility
+  // is applied at the call site, which simply skips this check.)
+  shouldEndGame(inv: Inventory, secondsLeft: number): 'Time' | 'Food' | 'Water' | null {
     if (secondsLeft <= 0) return 'Time';
     return this.isGameOver(inv);
   },

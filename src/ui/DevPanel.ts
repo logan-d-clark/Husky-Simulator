@@ -1,10 +1,18 @@
-import { config, DEFAULTS, applyConfig, resetConfig, serializeConfig, type GameConfig } from '../config/gameConfig';
+import Phaser from 'phaser';
+import {
+  config, DEFAULTS, INIT_ONLY_KEYS, applyConfig, resetConfig, serializeConfig, type GameConfig,
+} from '../config/gameConfig';
 
 const KEYS = Object.keys(DEFAULTS) as (keyof GameConfig)[];
 
+function applyStyle(el: HTMLElement, styles: Partial<CSSStyleDeclaration>): void {
+  Object.assign(el.style, styles);
+}
+
 // A dev-only HTML overlay for live-tuning the runtime config. Sits above the
-// Phaser canvas; toggled with the backtick key. Not part of the game render —
-// plain DOM so every config field gets a real number input.
+// Phaser canvas; toggled with the backtick key. Plain DOM (no Phaser) so every
+// config field gets a real number input. Attach it to a scene via
+// attachDevPanel() below.
 export class DevPanel {
   private root: HTMLDivElement;
   private inputs = new Map<keyof GameConfig, HTMLInputElement>();
@@ -12,13 +20,13 @@ export class DevPanel {
 
   constructor() {
     this.root = document.createElement('div');
-    Object.assign(this.root.style, {
+    applyStyle(this.root, {
       position: 'fixed', top: '12px', right: '12px', zIndex: '9999',
       width: '290px', maxHeight: '92vh', overflowY: 'auto', boxSizing: 'border-box',
       background: 'rgba(36,31,27,0.96)', color: '#f2ede0',
       font: '12px monospace', padding: '10px', borderRadius: '10px',
       border: '1px solid rgba(242,237,224,0.2)', boxShadow: '0 6px 24px rgba(0,0,0,0.45)',
-    } as Partial<CSSStyleDeclaration>);
+    });
     this.build();
     document.body.appendChild(this.root);
     this.setOpen(false);
@@ -27,35 +35,16 @@ export class DevPanel {
   private build(): void {
     const title = document.createElement('div');
     title.textContent = 'DEV CONFIG  ( ` to toggle )';
-    Object.assign(title.style, { fontWeight: 'bold', color: '#ffd27f', marginBottom: '8px' } as Partial<CSSStyleDeclaration>);
-    this.root.appendChild(title);
+    applyStyle(title, { fontWeight: 'bold', color: '#ffd27f', marginBottom: '6px' });
+    const legend = document.createElement('div');
+    legend.textContent = '↻ = applies on next game start';
+    applyStyle(legend, { color: '#b7a482', marginBottom: '8px', fontSize: '11px' });
+    this.root.append(title, legend);
 
-    for (const key of KEYS) {
-      const row = document.createElement('label');
-      Object.assign(row.style, {
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', margin: '2px 0',
-      } as Partial<CSSStyleDeclaration>);
-      const name = document.createElement('span');
-      name.textContent = key;
-      const input = document.createElement('input');
-      input.type = 'number';
-      input.step = 'any';
-      input.value = String(config[key]);
-      Object.assign(input.style, {
-        width: '92px', background: '#1a1613', color: '#f2ede0',
-        border: '1px solid #555', borderRadius: '4px', padding: '2px 4px',
-      } as Partial<CSSStyleDeclaration>);
-      input.addEventListener('change', () => {
-        const v = parseFloat(input.value);
-        if (!Number.isNaN(v)) applyConfig({ [key]: v } as Partial<GameConfig>);
-      });
-      this.inputs.set(key, input);
-      row.append(name, input);
-      this.root.appendChild(row);
-    }
+    for (const key of KEYS) this.root.appendChild(this.buildRow(key));
 
     const buttons = document.createElement('div');
-    Object.assign(buttons.style, { display: 'flex', gap: '6px', marginTop: '10px' } as Partial<CSSStyleDeclaration>);
+    applyStyle(buttons, { display: 'flex', gap: '6px', marginTop: '10px' });
     buttons.append(
       this.button('Reset', () => { resetConfig(); this.syncInputs(); }),
       this.button('Save .txt', () => this.save()),
@@ -63,13 +52,37 @@ export class DevPanel {
     this.root.appendChild(buttons);
   }
 
+  private buildRow(key: keyof GameConfig): HTMLLabelElement {
+    const initOnly = INIT_ONLY_KEYS.has(key);
+    const row = document.createElement('label');
+    applyStyle(row, { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', margin: '2px 0' });
+    const name = document.createElement('span');
+    name.textContent = initOnly ? `${key} ↻` : key;
+    if (initOnly) { name.title = 'Applies on next game start'; applyStyle(name, { color: '#b7a482' }); }
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.step = 'any';
+    input.value = String(config[key]);
+    applyStyle(input, {
+      width: '92px', background: '#1a1613', color: '#f2ede0',
+      border: '1px solid #555', borderRadius: '4px', padding: '2px 4px',
+    });
+    input.addEventListener('change', () => {
+      const v = parseFloat(input.value);
+      if (!Number.isNaN(v)) applyConfig({ [key]: v } as Partial<GameConfig>);
+    });
+    this.inputs.set(key, input);
+    row.append(name, input);
+    return row;
+  }
+
   private button(label: string, fn: () => void): HTMLButtonElement {
     const b = document.createElement('button');
     b.textContent = label;
-    Object.assign(b.style, {
+    applyStyle(b, {
       flex: '1', cursor: 'pointer', background: '#8fd98f', color: '#26301f',
       border: 'none', borderRadius: '6px', padding: '6px', fontWeight: 'bold',
-    } as Partial<CSSStyleDeclaration>);
+    });
     b.addEventListener('click', fn);
     return b;
   }
@@ -96,4 +109,14 @@ export class DevPanel {
   }
 
   destroy(): void { this.root.remove(); }
+}
+
+// Wire a dev panel to a scene: create it, toggle on backtick, tear it down when
+// the scene shuts down. Keeps the Phaser lifecycle glue out of the scene body.
+export function attachDevPanel(scene: Phaser.Scene): DevPanel {
+  const panel = new DevPanel();
+  scene.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.BACKTICK)
+    .on('down', () => panel.toggle());
+  scene.events.once('shutdown', () => panel.destroy());
+  return panel;
 }
