@@ -17,6 +17,7 @@ import { takeFoodAt, type Food } from '../entities/Food';
 import { getDifficultySettings, DEFAULT_DIFFICULTY, type Difficulty } from '../config/difficulty';
 import { attachDevPanel } from '../ui/DevPanel';
 import { assignHouseFaces } from '../world/houseFacades';
+import { computeFov } from '../world/fov';
 
 export class GameScene extends Phaser.Scene {
   private map!: GameMap;
@@ -30,6 +31,8 @@ export class GameScene extends Phaser.Scene {
   private chiMoving = false;
   private chiSpeedMultiplier = getDifficultySettings(DEFAULT_DIFFICULTY).chiSpeedMultiplier;
   private devMode = false;
+  private fogOfWar = false;
+  private fovSet: Set<string> | null = null; // Blizzlord field-of-view; null = full visibility
   private ownerRegistry!: OwnerRegistry;
   private held: Record<Direction, boolean> = { up: false, down: false, left: false, right: false };
   private moving = false;
@@ -49,9 +52,9 @@ export class GameScene extends Phaser.Scene {
   // Phaser runs init(data) before create() on every scene.start, so the
   // difficulty chosen on the menu is resolved here (default Normal if absent).
   init(data?: { difficulty?: Difficulty; devMode?: boolean }) {
-    this.chiSpeedMultiplier = getDifficultySettings(
-      data?.difficulty ?? DEFAULT_DIFFICULTY,
-    ).chiSpeedMultiplier;
+    const settings = getDifficultySettings(data?.difficulty ?? DEFAULT_DIFFICULTY);
+    this.chiSpeedMultiplier = settings.chiSpeedMultiplier;
+    this.fogOfWar = settings.fogOfWar;
     this.devMode = data?.devMode ?? false;
   }
 
@@ -73,6 +76,7 @@ export class GameScene extends Phaser.Scene {
     this.badges = [];
     this.badgeTickCounter = 0;
     this.tileSprites = [];
+    this.fovSet = null;
 
     this.map = parseMap(mapCsv);
     this.grid = new Grid(this.map);
@@ -92,8 +96,28 @@ export class GameScene extends Phaser.Scene {
 
     this.scene.launch('UI');
 
+    // Blizzlord: reveal only Blizzard's field of view.
+    if (this.fogOfWar) this.applyFov();
+
     // Dev mode: live config panel (backtick-toggled, self-teardown on shutdown).
     if (this.devMode) attachDevPanel(this);
+  }
+
+  // Recompute Blizzard's field of view and reflect it: grey out-of-sight tiles,
+  // and hide any food/Bandit standing in the dark. Blizzlord only.
+  private applyFov() {
+    const fov = computeFov(this.map, this.husky.tile);
+    this.fovSet = fov;
+    for (let r = 0; r < this.map.rows; r++) {
+      for (let c = 0; c < this.map.cols; c++) {
+        const t = this.map.tiles[r][c];
+        const spr = this.tileSprites[r][c];
+        if (fov.has(`${c},${r}`)) spr.setTint(t.type === 'grass' ? this.grassColor(t) : 0xffffff);
+        else spr.setTint(0x3a3a3a);
+      }
+    }
+    for (const [key, spr] of this.foodSprites) spr.setVisible(fov.has(key));
+    this.chiSprite.setVisible(fov.has(`${this.chihuahua.tile.col},${this.chihuahua.tile.row}`));
   }
 
   getHudState() {
@@ -231,7 +255,9 @@ export class GameScene extends Phaser.Scene {
       this.foods.push(food);
       const p = this.grid.tileToPixel(food.tile);
       const spr = this.add.image(p.x, p.y, food.type).setDepth(8);
-      this.foodSprites.set(this.fkey(food.tile.col, food.tile.row), spr);
+      const fk = this.fkey(food.tile.col, food.tile.row);
+      this.foodSprites.set(fk, spr);
+      if (this.fovSet && !this.fovSet.has(fk)) spr.setVisible(false); // dropped out of sight
     });
 
     // 5) chihuahua (Bandit) AI — kick from rest; continuous gliding is driven by
@@ -244,6 +270,9 @@ export class GameScene extends Phaser.Scene {
       ResourceSystem.drink(this.chihuahua.inv);
     }
     this.chiSprite.setTexture(`chi-${this.chihuahua.facing}-${Math.floor(performance.now() / 160) % 2}`);
+    if (this.fovSet) {
+      this.chiSprite.setVisible(this.fovSet.has(this.fkey(this.chihuahua.tile.col, this.chihuahua.tile.row)));
+    }
 
     // 6) sim-time / game-over. Dev mode freezes the clock and is invincible.
     if (!this.devMode) {
@@ -295,6 +324,8 @@ export class GameScene extends Phaser.Scene {
     }
 
     WorldActions.autoDump(this.husky, tile, this.ownerRegistry.get(tile.ownerId));
+
+    if (this.fogOfWar) this.applyFov(); // Blizzard moved — recompute what he sees
   }
 
   private nearWater(): boolean {

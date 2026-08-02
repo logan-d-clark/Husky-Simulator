@@ -63,17 +63,18 @@ export class MenuScene extends Phaser.Scene {
 
   private buildDifficulty(cx: number, y: number) {
     const levels = Object.keys(DIFFICULTIES) as Difficulty[];
-    const segW = 132, gap = 8, totalW = levels.length * segW + (levels.length - 1) * gap;
+    const segW = 150, segH = 46, gap = 10, totalW = levels.length * segW + (levels.length - 1) * gap;
     const startX = cx - totalW / 2 + segW / 2;
-    const segs: { key: Difficulty; g: Phaser.GameObjects.Graphics; t: Phaser.GameObjects.Text }[] = [];
+    const segs: { key: Difficulty; g: Phaser.GameObjects.Graphics; name: Phaser.GameObjects.Text; sub: Phaser.GameObjects.Text }[] = [];
     const refresh = () => {
       for (const s of segs) {
         const active = s.key === this.difficulty;
         s.g.clear();
         s.g.fillStyle(active ? hex('#ffd27f') : hex('#2a2622'), active ? 1 : 0.55)
-          .fillRoundedRect(-segW / 2, -18, segW, 36, 10);
-        s.g.lineStyle(1.5, hex('#ffd27f'), active ? 1 : 0.4).strokeRoundedRect(-segW / 2, -18, segW, 36, 10);
-        s.t.setColor(active ? '#3a2f22' : '#f2ede0');
+          .fillRoundedRect(-segW / 2, -segH / 2, segW, segH, 10);
+        s.g.lineStyle(1.5, hex('#ffd27f'), active ? 1 : 0.4).strokeRoundedRect(-segW / 2, -segH / 2, segW, segH, 10);
+        s.name.setColor(active ? '#3a2f22' : '#f2ede0');
+        s.sub.setColor(active ? '#6b5a3a' : '#b7a482');
       }
     };
     levels.forEach((key, i) => {
@@ -81,11 +82,12 @@ export class MenuScene extends Phaser.Scene {
       const cont = this.add.container(x, y);
       const g = this.add.graphics();
       const label = key.charAt(0).toUpperCase() + key.slice(1);
-      const t = this.add.text(0, 0, label, { fontSize: '18px', color: '#f2ede0' }).setOrigin(0.5);
-      cont.add([g, t]);
-      cont.setSize(segW, 36).setInteractive(new Phaser.Geom.Rectangle(-segW / 2, -18, segW, 36), Phaser.Geom.Rectangle.Contains);
+      const name = this.add.text(0, -9, label, { fontSize: '18px', color: '#f2ede0', fontStyle: 'bold' }).setOrigin(0.5);
+      const sub = this.add.text(0, 11, DIFFICULTIES[key].subtitle, { fontSize: '11px', color: '#b7a482' }).setOrigin(0.5);
+      cont.add([g, name, sub]);
+      cont.setSize(segW, segH).setInteractive(new Phaser.Geom.Rectangle(-segW / 2, -segH / 2, segW, segH), Phaser.Geom.Rectangle.Contains);
       cont.on('pointerdown', () => { this.difficulty = key; refresh(); });
-      segs.push({ key, g, t });
+      segs.push({ key, g, name, sub });
     });
     refresh();
   }
