@@ -4,6 +4,14 @@ import { DEFAULT_DIFFICULTY, DIFFICULTIES, type Difficulty } from '../config/dif
 
 const hex = (c: string) => Phaser.Display.Color.HexStringToColor(c).color;
 
+// Size a container and give it a hit area that matches its centered visuals. A
+// Container anchors its setSize input frame at the top-left of the size box
+// while its children render from the center, so the hit rect must be
+// (0,0,w,h) — a centered (-w/2,-h/2,w,h) rect lands shifted half-width off.
+function sizeAndHit(cont: Phaser.GameObjects.Container, w: number, h: number): void {
+  cont.setSize(w, h).setInteractive(new Phaser.Geom.Rectangle(0, 0, w, h), Phaser.Geom.Rectangle.Contains);
+}
+
 export class MenuScene extends Phaser.Scene {
   private difficulty: Difficulty = DEFAULT_DIFFICULTY;
   private devMode = false;
@@ -85,7 +93,7 @@ export class MenuScene extends Phaser.Scene {
       const name = this.add.text(0, -9, label, { fontSize: '18px', color: '#f2ede0', fontStyle: 'bold' }).setOrigin(0.5);
       const sub = this.add.text(0, 11, DIFFICULTIES[key].subtitle, { fontSize: '11px', color: '#b7a482' }).setOrigin(0.5);
       cont.add([g, name, sub]);
-      cont.setSize(segW, segH).setInteractive(new Phaser.Geom.Rectangle(-segW / 2, -segH / 2, segW, segH), Phaser.Geom.Rectangle.Contains);
+      sizeAndHit(cont, segW, segH);
       cont.on('pointerdown', () => { this.difficulty = key; refresh(); });
       segs.push({ key, g, name, sub });
     });
@@ -107,7 +115,7 @@ export class MenuScene extends Phaser.Scene {
     };
     draw(false);
     cont.add([g, t]);
-    cont.setSize(w, h).setInteractive(new Phaser.Geom.Rectangle(-w / 2, -h / 2, w, h), Phaser.Geom.Rectangle.Contains);
+    sizeAndHit(cont, w, h);
     cont.on('pointerover', () => draw(true));
     cont.on('pointerout', () => draw(false));
     cont.on('pointerdown', fn);
@@ -126,7 +134,7 @@ export class MenuScene extends Phaser.Scene {
     };
     draw();
     cont.add([g, t]);
-    cont.setSize(w, h).setInteractive(new Phaser.Geom.Rectangle(-w / 2, -h / 2, w, h), Phaser.Geom.Rectangle.Contains);
+    sizeAndHit(cont, w, h);
     cont.on('pointerdown', () => { this.devMode = !this.devMode; draw(); });
   }
 }

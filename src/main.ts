@@ -9,7 +9,7 @@ import { InstructionsScene } from './scenes/InstructionsScene';
 import { DESIGN_WIDTH, DESIGN_HEIGHT } from './config/constants';
 import { HUD_H } from './scenes/UIScene';
 
-new Phaser.Game({
+const game = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',
   backgroundColor: '#1a1a1a',
@@ -18,3 +18,6 @@ new Phaser.Game({
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
   scene: [BootScene, PreloadScene, MenuScene, InstructionsScene, GameScene, UIScene, GameOverScene],
 });
+
+// Debug handle: expose the running game for console/automation inspection.
+(window as unknown as { game: Phaser.Game }).game = game;
