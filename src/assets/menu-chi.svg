@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="100" viewBox="0 0 120 100">
+  <!-- authored facing right, flipped to face left (toward centre) like the in-game chi -->
+  <g transform="translate(120,0) scale(-1,1)">
+    <!-- ground shadow -->
+    <ellipse cx="58" cy="90" rx="40" ry="6" fill="#00000022"/>
+
+    <!-- thin curved tail, up at the back -->
+    <path d="M26 62 q-16 -4 -14 -22 q1 -8 7 -9 q-3 8 1 15 q4 8 12 9 z" fill="#8a5a2b"/>
+
+    <!-- back legs + paws -->
+    <rect x="30" y="60" width="7" height="27" rx="3.5" fill="#8a5a2b"/>
+    <rect x="52" y="60" width="7" height="27" rx="3.5" fill="#8a5a2b"/>
+    <rect x="29" y="82" width="10" height="6" rx="3" fill="#f2ede0"/>
+    <rect x="51" y="82" width="10" height="6" rx="3" fill="#f2ede0"/>
+
+    <!-- small body -->
+    <ellipse cx="50" cy="60" rx="27" ry="16" fill="#c9915a"/>
+    <!-- cream belly -->
+    <ellipse cx="62" cy="66" rx="15" ry="9" fill="#f2ede0"/>
+
+    <!-- front legs + paws -->
+    <rect x="40" y="63" width="7" height="24" rx="3.5" fill="#8a5a2b"/>
+    <rect x="62" y="63" width="7" height="24" rx="3.5" fill="#8a5a2b"/>
+    <rect x="39" y="82" width="10" height="6" rx="3" fill="#f2ede0"/>
+    <rect x="61" y="82" width="10" height="6" rx="3" fill="#f2ede0"/>
+
+    <!-- head (apple-domed) -->
+    <circle cx="82" cy="46" r="18" fill="#c9915a"/>
+
+    <!-- oversized bat ears (chihuahua signature) -->
+    <polygon points="70,34 58,2 84,26" fill="#c9915a"/>
+    <polygon points="71,30 64,10 81,26" fill="#e6b48c"/>
+    <polygon points="94,34 108,4 82,26" fill="#c9915a"/>
+    <polygon points="93,30 101,11 84,26" fill="#e6b48c"/>
+
+    <!-- cream muzzle + pointed snout -->
+    <ellipse cx="96" cy="52" rx="14" ry="9" fill="#f2ede0"/>
+
+    <!-- big round eyes (chihuahuas are wide-eyed) -->
+    <circle cx="86" cy="44" r="5" fill="#f2ede0"/>
+    <circle cx="87" cy="44.5" r="3.6" fill="#161616"/>
+    <circle cx="85.4" cy="42.8" r="1.3" fill="#ffffff"/>
+
+    <!-- nose + tiny tongue -->
+    <ellipse cx="108" cy="50" rx="4" ry="3.2" fill="#1a1a1a"/>
+    <path d="M102 56 q4 6 -2 8 q-4 0 -3 -5 z" fill="#e8899a"/>
+  </g>
+</svg>
