@@ -15,6 +15,11 @@ const CS_X = 706;            // Current Space panel left edge
 const CS_A = 726, CS_A_BAR = 818;   // sub-column A (owner / tolerance / likes)
 const CS_B = 1012, CS_B_BAR = 1072; // sub-column B (heat / poop / pee)
 const BAR_W = 170, BAR_H = 14, BAR_R = 7;
+// Blizzard's four stat rows share Current Space's top (y0+ROW0) and a tight
+// pitch so the left section reads as the same height as the right one — a
+// smaller Food→Water gap than before. Bars sit BAR_DY below their text row.
+const ROW0 = 58, ROW_PITCH = 22, BAR_DY = 3;
+const ROW = (i: number): number => ROW0 + i * ROW_PITCH; // 0=food 1=water 2=poop 3=pee
 
 export class UIScene extends Phaser.Scene {
   private g!: Phaser.GameObjects.Graphics;
@@ -45,17 +50,17 @@ export class UIScene extends Phaser.Scene {
     const mk = (k: string, x: number, y: number, size = '15px', originX = 0, color: string = PALETTE.hudText) => {
       this.texts[k] = this.add.text(x, y, '', { color, fontSize: size }).setOrigin(originX, 0);
     };
-    // header
-    mk('timer', LEFT_X, y0 + 10, '17px');
+    // header — timer sits beside the score, left-aligned to the Current Space panel
+    mk('timer', CS_X, y0 + 10, '17px');
     mk('score', W - 24, y0 + 10, '17px', 1);
     // zone headers
     this.add.text(LEFT_X, y0 + 34, HUSKY_NAME.toUpperCase(), { color: '#ffd27f', fontSize: '13px', fontStyle: 'bold' });
     this.add.text(CS_X, y0 + 34, 'CURRENT SPACE', { color: '#ffd27f', fontSize: '13px', fontStyle: 'bold' });
     // left zone (Blizzard) — food matches the other stat rows' size
-    mk('food', LEFT_X, y0 + 62, '15px');
-    mk('waterL', LEFT_X, y0 + 96);
-    mk('poopL', LEFT_X, y0 + 122);
-    mk('peeL', LEFT_X, y0 + 148);
+    mk('food', LEFT_X, y0 + ROW(0), '15px');
+    mk('waterL', LEFT_X, y0 + ROW(1));
+    mk('poopL', LEFT_X, y0 + ROW(2));
+    mk('peeL', LEFT_X, y0 + ROW(3));
     // right zone (Current Space) — sub-column A
     mk('owner', CS_A, y0 + 58, '15px');
     mk('tolL', CS_A, y0 + 88);
@@ -90,9 +95,9 @@ export class UIScene extends Phaser.Scene {
     this.texts.food.setColor(low ? PALETTE.affection : PALETTE.hudText);
 
     // Blizzard's own resource bars (water has a cap; poop/pee are need-to-go).
-    bar(LEFT_BAR, y0 + 99, s.water, config.WATER_CAP, PALETTE.water);
-    bar(LEFT_BAR, y0 + 125, s.poop, config.POOP_MAX, PALETTE.fence);
-    bar(LEFT_BAR, y0 + 151, s.pee, config.PEE_MAX, PALETTE.affection);
+    bar(LEFT_BAR, y0 + ROW(1) + BAR_DY, s.water, config.WATER_CAP, PALETTE.water);
+    bar(LEFT_BAR, y0 + ROW(2) + BAR_DY, s.poop, config.POOP_MAX, PALETTE.fence);
+    bar(LEFT_BAR, y0 + ROW(3) + BAR_DY, s.pee, config.PEE_MAX, PALETTE.affection);
     this.texts.waterL.setText(`💧 Water ${s.water.toFixed(0)}`);
     this.texts.poopL.setText(`💩 Poop ${s.poop.toFixed(0)}`);
     this.texts.peeL.setText(`🟡 Pee ${s.pee.toFixed(0)}`);
