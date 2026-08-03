@@ -16,6 +16,9 @@ export class PreloadScene extends Phaser.Scene {
     svg('house-front-window', new URL('../assets/house-front-window.svg', import.meta.url).href, 28, 28);
     svg('house-front-bare', new URL('../assets/house-front-bare.svg', import.meta.url).href, 28, 28);
     svg('water', new URL('../assets/water.svg', import.meta.url).href, 28, 28);
+    // Higher-fidelity, menu-only dog portraits (rasterized at ~2x for crispness).
+    svg('menu-husky', new URL('../assets/menu-husky.svg', import.meta.url).href, 256, 200);
+    svg('menu-chi', new URL('../assets/menu-chi.svg', import.meta.url).href, 240, 200);
     svg('fenceH', new URL('../assets/fence-h.svg', import.meta.url).href, 28, 4);
     svg('fenceV', new URL('../assets/fence-v.svg', import.meta.url).href, 4, 28);
     // Food uses the original pixel-art PNGs from V1 (not the refactor's SVGs).

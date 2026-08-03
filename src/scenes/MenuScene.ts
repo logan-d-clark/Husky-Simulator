@@ -4,6 +4,14 @@ import { DEFAULT_DIFFICULTY, DIFFICULTIES, type Difficulty } from '../config/dif
 
 const hex = (c: string) => Phaser.Display.Color.HexStringToColor(c).color;
 
+// Give a text a dark outline + soft shadow so it stays legible over the bright
+// sky/grass backdrop (light cream/gold on light blue otherwise washes out).
+function legible<T extends Phaser.GameObjects.Text>(t: T, thickness = 4): T {
+  t.setStroke('#241f1b', thickness);
+  t.setShadow(0, 3, 'rgba(20,16,12,0.55)', 5, true, true);
+  return t;
+}
+
 // Size a container and give it a hit area that matches its centered visuals. A
 // Container anchors its setSize input frame at the top-left of the size box
 // while its children render from the center, so the hit rect must be
@@ -25,19 +33,20 @@ export class MenuScene extends Phaser.Scene {
     this.drawScene(W, H);
 
     // Title
-    this.add.text(cx, 132, 'Husky Simulator', {
+    legible(this.add.text(cx, 132, 'Husky Simulator', {
       fontSize: '58px', color: '#ffffff', fontStyle: 'bold',
-    }).setOrigin(0.5).setShadow(0, 4, '#2a2622', 6, false, true);
-    this.add.text(cx, 192, 'Escape the yard. Gather treats. Beat the rival.', {
+    }).setOrigin(0.5), 6);
+    legible(this.add.text(cx, 192, 'Escape the yard. Gather treats. Beat the rival.', {
       fontSize: '20px', color: '#f2ede0',
-    }).setOrigin(0.5).setShadow(0, 2, '#2a2622', 3);
+    }).setOrigin(0.5));
 
-    // Flanking dogs facing the center.
-    this.add.image(196, 452, 'husky-right-0').setScale(3.6).setOrigin(0.5);
-    this.add.image(W - 196, 452, 'chi-left-0').setScale(3.6).setOrigin(0.5);
+    // Flanking dogs facing the center — higher-fidelity menu-only portraits.
+    // The husky reads bigger than the chihuahua, as in-game.
+    this.add.image(210, 468, 'menu-husky').setScale(0.64).setOrigin(0.5);
+    this.add.image(W - 210, 476, 'menu-chi').setScale(0.5).setOrigin(0.5);
 
     // Difficulty segmented control.
-    this.add.text(cx, 300, 'DIFFICULTY', { fontSize: '15px', color: '#ffd27f', fontStyle: 'bold' }).setOrigin(0.5);
+    legible(this.add.text(cx, 300, 'DIFFICULTY', { fontSize: '15px', color: '#ffd27f', fontStyle: 'bold' }).setOrigin(0.5), 3);
     this.buildDifficulty(cx, 340);
 
     // Primary + secondary actions, stacked and centered.
