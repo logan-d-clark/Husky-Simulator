@@ -37,6 +37,7 @@ export interface GameConfig {
   SMELL_TREAT: number; // Bandit's smell radius (tiles) per food type
   SMELL_BOWL: number;
   SMELL_BAG: number;
+  PATROL_SPEED_MULTIPLIER: number; // Bandit's per-tile duration x this while patrolling (2 = half speed)
 }
 
 // Frozen baseline — every value verbatim from the original constants.
@@ -71,6 +72,7 @@ export const DEFAULTS: Readonly<GameConfig> = Object.freeze({
   SMELL_TREAT: 5,
   SMELL_BOWL: 8,
   SMELL_BAG: 12,
+  PATROL_SPEED_MULTIPLIER: 2,
 });
 
 // The live config every consumer reads from. Starts at defaults.

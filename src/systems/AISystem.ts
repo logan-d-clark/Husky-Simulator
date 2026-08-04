@@ -2,6 +2,7 @@ import type { Grid } from '../world/Grid';
 import type { Direction, TileCoord, Inventory, FoodType } from '../types';
 import type { Food } from '../entities/Food';
 import { config } from '../config/gameConfig';
+import { banditSettings } from '../config/banditMode';
 
 const DIRS: Direction[] = ['up', 'down', 'left', 'right'];
 const key = (c: number, r: number): string => `${c},${r}`;
@@ -20,18 +21,30 @@ export function smellRadius(type: FoodType): number {
   return type === 'bag' ? config.SMELL_BAG : type === 'bowl' ? config.SMELL_BOWL : config.SMELL_TREAT;
 }
 
-// Best food Bandit can currently smell, ranked by value/distance so a distant
-// high-value bag can beat a nearby treat. null when nothing is in range.
-export function bestSmelledFood(from: TileCoord, foods: Food[]): Food | null {
+// Rank foods by value/distance (so a distant high-value bag can beat a nearby
+// treat); when `smellGated`, skip any food beyond its type's smell radius.
+function bestFood(from: TileCoord, foods: Food[], smellGated: boolean): Food | null {
   let best: Food | null = null;
   let bestScore = -Infinity;
   for (const f of foods) {
     const d = manhattan(from, f.tile);
-    if (d > smellRadius(f.type)) continue;
+    if (smellGated && d > smellRadius(f.type)) continue;
     const score = f.value / (d + 1);
     if (score > bestScore) { bestScore = score; best = f; }
   }
   return best;
+}
+
+// Best food Bandit can currently smell (advanced mode). null when nothing is
+// within smell range.
+export function bestSmelledFood(from: TileCoord, foods: Food[]): Food | null {
+  return bestFood(from, foods, true);
+}
+
+// Best food anywhere on the map, ignoring smell range (omniscient mode). null
+// only when no food exists at all.
+export function bestFoodAnywhere(from: TileCoord, foods: Food[]): Food | null {
+  return bestFood(from, foods, false);
 }
 
 export function isThirsty(inv: Inventory): boolean {
@@ -65,28 +78,69 @@ export function bfsFirstStep(grid: Grid, from: TileCoord, isGoal: (t: TileCoord)
   return null;
 }
 
-// A wandering step when Bandit has no goal: keep going straight most of the
-// time, otherwise pick a random open direction.
-export function patrolDir(grid: Grid, from: TileCoord, facing: Direction, rng: () => number): Direction | null {
+const OPPOSITE: Record<Direction, Direction> = { up: 'down', down: 'up', left: 'right', right: 'left' };
+const YARD_EXPLORE_CHANCE = 0.15; // chance to dip off the street into a yard
+const CONTINUE_CHANCE = 0.8;      // chance to keep heading straight down the street
+
+const pick = (dirs: Direction[], rng: () => number): Direction => dirs[Math.floor(rng() * dirs.length)];
+
+// Cohesive street-search patrol (advanced mode's no-scent behaviour). Bandit
+// sticks mostly to pavement: he keeps heading down the street, avoids doubling
+// back, and only occasionally dips into an adjacent yard — from which he then
+// biases straight back toward the street. Stateless: the "return to street"
+// emerges from a strong pavement preference, so no history is stored on Bandit.
+export function patrolStep(grid: Grid, from: TileCoord, facing: Direction, rng: () => number): Direction | null {
   const open = DIRS.filter((d) => grid.canMove(from, d));
   if (open.length === 0) return null;
-  if (open.includes(facing) && rng() < 0.65) return facing;
-  return open[Math.floor(rng() * open.length)];
+  const typeOf = (d: Direction): string | undefined => {
+    const n = grid.neighbor(from, d);
+    return grid.tileAt(n.col, n.row)?.type;
+  };
+  const pavement = open.filter((d) => typeOf(d) === 'pavement');
+  const onPavement = grid.tileAt(from.col, from.row)?.type === 'pavement';
+
+  if (onPavement && pavement.length > 0) {
+    const yards = open.filter((d) => typeOf(d) === 'grass' && d !== OPPOSITE[facing]);
+    if (yards.length > 0 && rng() < YARD_EXPLORE_CHANCE) return pick(yards, rng);
+    if (pavement.includes(facing) && rng() < CONTINUE_CHANCE) return facing;
+    const forward = pavement.filter((d) => d !== OPPOSITE[facing]);
+    return pick(forward.length > 0 ? forward : pavement, rng);
+  }
+  // Off the street (or no pavement ahead): head back toward pavement if any is
+  // adjacent, otherwise keep moving without reversing.
+  if (pavement.length > 0) return pick(pavement, rng);
+  const forward = open.filter((d) => d !== OPPOSITE[facing]);
+  return pick(forward.length > 0 ? forward : open, rng);
 }
 
-// Bandit's next move direction: seek water when thirsty, else head for the best
-// smelled food, else patrol until something turns up.
-export function nextBanditMove(grid: Grid, bandit: Bandit, foods: Food[], rng: () => number): Direction | null {
+export type BanditMode = 'chase' | 'patrol';
+export interface BanditMove { dir: Direction; mode: BanditMode; }
+
+// Bandit's next move: seek water when thirsty (full-speed chase), else head for
+// the best food — smell-gated in advanced mode, anywhere in omniscient mode
+// (full-speed chase) — else wander the streets (half-speed patrol). Reads the
+// live omniscient flag so a dev-panel toggle takes effect on the next move.
+export function nextBanditMove(grid: Grid, bandit: Bandit, foods: Food[], rng: () => number): BanditMove | null {
   if (isThirsty(bandit.inv)) {
     const toWater = bfsFirstStep(grid, bandit.tile, (t) => isWaterAdjacent(grid, t));
-    if (toWater) return toWater;
+    if (toWater) return { dir: toWater, mode: 'chase' };
   }
-  const food = bestSmelledFood(bandit.tile, foods);
+  const food = banditSettings.omniscient
+    ? bestFoodAnywhere(bandit.tile, foods)
+    : bestSmelledFood(bandit.tile, foods);
   if (food) {
     const toFood = bfsFirstStep(grid, bandit.tile, (t) => t.col === food.tile.col && t.row === food.tile.row);
-    if (toFood) return toFood;
+    if (toFood) return { dir: toFood, mode: 'chase' };
   }
-  return patrolDir(grid, bandit.tile, bandit.facing, rng);
+  const dir = patrolStep(grid, bandit.tile, bandit.facing, rng);
+  return dir ? { dir, mode: 'patrol' } : null;
+}
+
+// Per-tile tween duration for a Bandit move: patrol steps take `patrolMultiplier`
+// times longer than a chase step (2 = half speed). Pure so it unit-tests without
+// Phaser.
+export function banditTweenDuration(base: number, mode: BanditMode, patrolMultiplier: number): number {
+  return mode === 'patrol' ? base * patrolMultiplier : base;
 }
 
 // Retained for the water-drinking check at the call site.

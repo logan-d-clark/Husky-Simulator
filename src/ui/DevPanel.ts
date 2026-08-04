@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import {
   config, DEFAULTS, INIT_ONLY_KEYS, applyConfig, resetConfig, serializeConfig, parseConfig, type GameConfig,
 } from '../config/gameConfig';
+import { banditSettings, resetBanditSettings } from '../config/banditMode';
 
 const KEYS = Object.keys(DEFAULTS) as (keyof GameConfig)[];
 const PROFILES_KEY = 'husky-dev-profiles';
@@ -25,6 +26,7 @@ export class DevPanel {
   private root: HTMLDivElement;
   private inputs = new Map<keyof GameConfig, HTMLInputElement>();
   private profileSelect!: HTMLSelectElement;
+  private banditToggle!: HTMLInputElement;
   private open = false;
 
   constructor(private opts: { onRestart?: () => void } = {}) {
@@ -55,14 +57,37 @@ export class DevPanel {
     for (const key of KEYS) this.root.appendChild(this.buildRow(key));
 
     const resets = this.buttonRow(
-      this.button('Reset to Defaults', () => { resetConfig(); this.syncInputs(); }),
+      this.button('Reset to Defaults', () => { resetConfig(); resetBanditSettings(); this.syncInputs(); }),
       this.button('Restart Game', () => this.opts.onRestart?.()),
     );
     const files = this.buttonRow(
       this.button('Import .txt', () => this.importFile()),
       this.button('Save .txt', () => this.save()),
     );
-    this.root.append(resets, files, this.buildProfiles());
+    this.root.append(resets, files, this.buildBanditToggle(), this.buildProfiles());
+  }
+
+  // A live toggle for Bandit's AI mode. Its own labelled section (not folded
+  // into the numeric per-key loop) since it's a behaviour switch, not a tunable;
+  // a native checkbox gives keyboard operability for free. Read live by the AI.
+  private buildBanditToggle(): HTMLDivElement {
+    const wrap = document.createElement('div');
+    applyStyle(wrap, { marginTop: '10px', borderTop: '1px solid #4a423a', paddingTop: '8px' });
+    const label = document.createElement('div');
+    label.textContent = 'BANDIT AI';
+    applyStyle(label, { color: '#ffd27f', fontWeight: 'bold', marginBottom: '4px' });
+    const row = document.createElement('label');
+    applyStyle(row, { display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' });
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = banditSettings.omniscient;
+    cb.addEventListener('change', () => { banditSettings.omniscient = cb.checked; });
+    const txt = document.createElement('span');
+    txt.textContent = 'Omniscient (always finds the best food)';
+    this.banditToggle = cb;
+    row.append(cb, txt);
+    wrap.append(label, row);
+    return wrap;
   }
 
   private buttonRow(...children: HTMLElement[]): HTMLDivElement {
@@ -181,6 +206,7 @@ export class DevPanel {
 
   private syncInputs(): void {
     for (const [key, input] of this.inputs) input.value = String(config[key]);
+    if (this.banditToggle) this.banditToggle.checked = banditSettings.omniscient;
   }
 
   private save(): void {

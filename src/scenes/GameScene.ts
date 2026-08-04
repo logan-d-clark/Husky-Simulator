@@ -9,7 +9,7 @@ import { Husky } from '../entities/Husky';
 import { Chihuahua } from '../entities/Chihuahua';
 import { ResourceSystem } from '../systems/ResourceSystem';
 import { WorldActions } from '../systems/WorldActions';
-import { nextBanditMove, isThirsty, isWaterAdjacent } from '../systems/AISystem';
+import { nextBanditMove, banditTweenDuration, isThirsty, isWaterAdjacent } from '../systems/AISystem';
 import { OwnerRegistry, dispenseOverMap } from '../systems/OwnerRegistry';
 import { createBadges, updateBadges, type Badge } from '../ui/HouseholdProfile';
 import type { Direction, TileCoord } from '../types';
@@ -197,15 +197,18 @@ export class GameScene extends Phaser.Scene {
   // onArrive to sustain the glide.
   private tryChiStep() {
     if (this.over || this.chiMoving) return;
-    const dir = nextBanditMove(this.grid, this.chihuahua, this.foods, Math.random);
-    if (!dir) return;
-    this.chihuahua.facing = dir;
-    const to = this.grid.neighbor(this.chihuahua.tile, dir);
+    const move = nextBanditMove(this.grid, this.chihuahua, this.foods, Math.random);
+    if (!move) return;
+    this.chihuahua.facing = move.dir;
+    const to = this.grid.neighbor(this.chihuahua.tile, move.dir);
     this.chihuahua.tile = to;
     ResourceSystem.applyMoveCost(this.chihuahua.inv); // food/water down, poop/pee up (min 0 food is fine — no death)
     this.chihuahua.inv.food = Math.max(0, this.chihuahua.inv.food);
     this.chiMoving = true;
-    this.advanceEntity(this.chiSprite, to, this.step * this.chiSpeedMultiplier, () => {
+    // Patrol steps glide at half speed (2x duration); a scent/water chase runs full speed.
+    const base = this.step * this.chiSpeedMultiplier;
+    const dur = banditTweenDuration(base, move.mode, config.PATROL_SPEED_MULTIPLIER);
+    this.advanceEntity(this.chiSprite, to, dur, () => {
       this.chiMoving = false; this.onChiEnterTile(); this.tryChiStep();
     });
   }
