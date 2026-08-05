@@ -100,6 +100,7 @@ describe('nextBanditMove', () => {
   const rng = () => 0;
 
   it('chases the only smelled food (advanced mode)', () => {
+    banditSettings.omniscient = false;
     const foods: Food[] = [{ type: 'treat', value: 10, tile: { col: 4, row: 0 } }];
     expect(nextBanditMove(grid, bandit(0), foods, rng)).toEqual({ dir: 'right', mode: 'chase' });
   });
@@ -116,12 +117,14 @@ describe('nextBanditMove', () => {
     expect(nextBanditMove(waterGrid, thirsty, [], rng)).toEqual({ dir: 'right', mode: 'chase' });
   });
 
-  it('detects food exactly at the smell-range boundary', () => {
+  it('detects food exactly at the smell-range boundary (advanced mode)', () => {
+    banditSettings.omniscient = false;
     const foods: Food[] = [{ type: 'treat', value: 10, tile: { col: config.SMELL_TREAT, row: 0 } }];
     expect(nextBanditMove(grid, bandit(0), foods, rng)?.mode).toBe('chase');
   });
 
-  it('ignores food one tile beyond the smell-range boundary', () => {
+  it('ignores food one tile beyond the smell-range boundary (advanced mode)', () => {
+    banditSettings.omniscient = false;
     const foods: Food[] = [{ type: 'treat', value: 10, tile: { col: config.SMELL_TREAT + 1, row: 0 } }];
     expect(nextBanditMove(grid, bandit(0), foods, rng)?.mode).toBe('patrol');
   });

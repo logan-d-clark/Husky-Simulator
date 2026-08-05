@@ -38,6 +38,8 @@ export interface GameConfig {
   SMELL_BOWL: number;
   SMELL_BAG: number;
   PATROL_SPEED_MULTIPLIER: number; // Bandit's per-tile duration x this while patrolling (2 = half speed)
+  BANDIT_GRAB_RADIUS: number;      // tiles: Bandit detours for a treat this close while heading to water
+  BANDIT_RELIEVE_THRESHOLD: number; // poop/pee level that sends Bandit to a yard to relieve
 }
 
 // Frozen baseline — every value verbatim from the original constants.
@@ -73,6 +75,8 @@ export const DEFAULTS: Readonly<GameConfig> = Object.freeze({
   SMELL_BOWL: 8,
   SMELL_BAG: 12,
   PATROL_SPEED_MULTIPLIER: 2,
+  BANDIT_GRAB_RADIUS: 2,
+  BANDIT_RELIEVE_THRESHOLD: 30,
 });
 
 // The live config every consumer reads from. Starts at defaults.
