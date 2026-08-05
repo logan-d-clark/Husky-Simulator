@@ -9,8 +9,9 @@ import { Husky } from '../entities/Husky';
 import { Chihuahua } from '../entities/Chihuahua';
 import { ResourceSystem } from '../systems/ResourceSystem';
 import { WorldActions } from '../systems/WorldActions';
-import { nextBanditMove, banditTweenDuration, isThirsty, isWaterAdjacent } from '../systems/AISystem';
-import { OwnerRegistry, dispenseOverMap } from '../systems/OwnerRegistry';
+import { nextBanditMove, banditTweenDuration, isWaterAdjacent } from '../systems/AISystem';
+import { OwnerRegistry, dispenseOverMap, buildRelieveTargets } from '../systems/OwnerRegistry';
+import { BanditController } from '../systems/BanditController';
 import { createBadges, updateBadges, type Badge } from '../ui/HouseholdProfile';
 import type { Direction, TileCoord } from '../types';
 import { takeFoodAt, type Food } from '../entities/Food';
@@ -30,6 +31,7 @@ export class GameScene extends Phaser.Scene {
   private chiSprite!: Phaser.GameObjects.Image;
   private chiMoving = false;
   private chiSpeedMultiplier = getDifficultySettings(DEFAULT_DIFFICULTY).chiSpeedMultiplier;
+  private banditController = new BanditController();
   private devMode = false;
   private difficulty: Difficulty = DEFAULT_DIFFICULTY;
   private fogOfWar = false;
@@ -195,9 +197,40 @@ export class GameScene extends Phaser.Scene {
   // is difficulty-driven via chiSpeedMultiplier. Called from each sim tick as a
   // safety-net kick when idle (e.g. once new food appears), and from its own
   // onArrive to sustain the glide.
+  // Per-tick Bandit update: run his commitment state machine; while committed he
+  // holds still (static frame) and any yard he fouls is re-tinted so the mess is
+  // visible even when Blizzard isn't there; otherwise he glides via tryChiStep.
+  private updateBandit() {
+    const chiTile = this.map.tiles[this.chihuahua.tile.row][this.chihuahua.tile.col];
+    const { suppressMove } = this.banditController.tick({
+      inv: this.chihuahua.inv,
+      tile: chiTile,
+      owner: this.ownerRegistry.get(chiTile.ownerId),
+      waterAdjacent: isWaterAdjacent(this.grid, this.chihuahua.tile),
+    });
+    if (suppressMove) {
+      this.chiSprite.setTexture(`chi-${this.chihuahua.facing}-0`);
+      this.retintFouledTile(chiTile);
+    } else {
+      this.tryChiStep();
+      this.chiSprite.setTexture(`chi-${this.chihuahua.facing}-${Math.floor(performance.now() / 160) % 2}`);
+    }
+    ResourceSystem.applyHeat(this.chihuahua.inv, chiTile.heat);
+    if (this.fovSet) {
+      this.chiSprite.setVisible(this.fovSet.has(this.fkey(this.chihuahua.tile.col, this.chihuahua.tile.row)));
+    }
+  }
+
+  private retintFouledTile(tile: Tile) {
+    if (tile.type !== 'grass') return;
+    if (this.fogOfWar && this.fovSet && !this.fovSet.has(this.fkey(tile.col, tile.row))) return;
+    this.tileSprites[tile.row][tile.col].setTint(this.grassColor(tile));
+  }
+
   private tryChiStep() {
     if (this.over || this.chiMoving) return;
-    const move = nextBanditMove(this.grid, this.chihuahua, this.foods, Math.random);
+    const relieveTargets = buildRelieveTargets(this.map, this.ownerRegistry);
+    const move = nextBanditMove(this.grid, this.chihuahua, this.foods, Math.random, relieveTargets);
     if (!move) return;
     this.chihuahua.facing = move.dir;
     const to = this.grid.neighbor(this.chihuahua.tile, move.dir);
@@ -273,19 +306,10 @@ export class GameScene extends Phaser.Scene {
       if (this.fovSet && !this.fovSet.has(fk)) spr.setVisible(false); // dropped out of sight
     });
 
-    // 5) chihuahua (Bandit) AI — kick from rest; continuous gliding is driven by
-    //    each tween's onArrive (see tryChiStep). Bandit shares Blizzard's needs:
-    //    heat every tick, and drinking when thirsty next to water.
-    this.tryChiStep();
-    const chiTile = this.map.tiles[this.chihuahua.tile.row][this.chihuahua.tile.col];
-    ResourceSystem.applyHeat(this.chihuahua.inv, chiTile.heat);
-    if (isThirsty(this.chihuahua.inv) && isWaterAdjacent(this.grid, this.chihuahua.tile)) {
-      ResourceSystem.drink(this.chihuahua.inv);
-    }
-    this.chiSprite.setTexture(`chi-${this.chihuahua.facing}-${Math.floor(performance.now() / 160) % 2}`);
-    if (this.fovSet) {
-      this.chiSprite.setVisible(this.fovSet.has(this.fkey(this.chihuahua.tile.col, this.chihuahua.tile.row)));
-    }
+    // 5) chihuahua (Bandit) AI. The controller runs his stay-put commitments
+    //    (full water refill, fouling a yard); while committed he holds position
+    //    and a static frame instead of gliding.
+    this.updateBandit();
 
     // 6) sim-time / game-over. Dev mode freezes the clock and is invincible.
     if (!this.devMode) {
