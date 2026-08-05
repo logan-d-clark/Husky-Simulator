@@ -143,7 +143,9 @@ export function rankRelieveTargets(from: TileCoord, targets: RelieveTarget[]): R
     .map((x) => x.t);
 }
 
-function needsRelieve(inv: Inventory): boolean {
+// Bandit's poop or pee has crossed the level that sends him to a yard to relieve.
+// Shared by the AI (path toward a yard) and BanditController (commit to fouling).
+export function needsRelieve(inv: Inventory): boolean {
   return inv.poop >= config.BANDIT_RELIEVE_THRESHOLD || inv.pee >= config.BANDIT_RELIEVE_THRESHOLD;
 }
 

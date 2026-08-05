@@ -103,3 +103,22 @@ describe('BanditController — relieving', () => {
     expect(i.poop).toBe(config.BANDIT_RELIEVE_THRESHOLD); // untouched
   });
 });
+
+describe('BanditController — shouldHold (movement gate)', () => {
+  it('holds on a yard when the need is high', () => {
+    const c = new BanditController();
+    expect(c.shouldHold({ inv: inv({ poop: config.BANDIT_RELIEVE_THRESHOLD }), tile: tile('grass'), owner: owner(50), waterAdjacent: false })).toBe(true);
+  });
+  it('holds next to water while below the cap', () => {
+    const c = new BanditController();
+    expect(c.shouldHold({ inv: inv({ water: 10 }), tile: tile('pavement'), owner: owner(50), waterAdjacent: true })).toBe(true);
+  });
+  it('does not hold on pavement with a low need and full water', () => {
+    const c = new BanditController();
+    expect(c.shouldHold({ inv: inv({ water: config.WATER_CAP }), tile: tile('pavement'), owner: owner(50), waterAdjacent: true })).toBe(false);
+  });
+  it('does not hold on a yard once the need is spent', () => {
+    const c = new BanditController();
+    expect(c.shouldHold({ inv: inv({ poop: 0, pee: 0 }), tile: tile('grass'), owner: owner(50), waterAdjacent: false })).toBe(false);
+  });
+});

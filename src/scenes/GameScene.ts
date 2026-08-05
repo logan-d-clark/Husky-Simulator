@@ -11,7 +11,7 @@ import { ResourceSystem } from '../systems/ResourceSystem';
 import { WorldActions } from '../systems/WorldActions';
 import { nextBanditMove, banditTweenDuration, isWaterAdjacent } from '../systems/AISystem';
 import { OwnerRegistry, dispenseOverMap, buildRelieveTargets } from '../systems/OwnerRegistry';
-import { BanditController } from '../systems/BanditController';
+import { BanditController, type BanditTickInput } from '../systems/BanditController';
 import { createBadges, updateBadges, type Badge } from '../ui/HouseholdProfile';
 import type { Direction, TileCoord } from '../types';
 import { takeFoodAt, type Food } from '../entities/Food';
@@ -200,22 +200,27 @@ export class GameScene extends Phaser.Scene {
   // Per-tick Bandit update: run his commitment state machine; while committed he
   // holds still (static frame) and any yard he fouls is re-tinted so the mess is
   // visible even when Blizzard isn't there; otherwise he glides via tryChiStep.
-  private updateBandit() {
-    const chiTile = this.map.tiles[this.chihuahua.tile.row][this.chihuahua.tile.col];
-    const { suppressMove } = this.banditController.tick({
+  private banditInput(): BanditTickInput {
+    const tile = this.map.tiles[this.chihuahua.tile.row][this.chihuahua.tile.col];
+    return {
       inv: this.chihuahua.inv,
-      tile: chiTile,
-      owner: this.ownerRegistry.get(chiTile.ownerId),
+      tile,
+      owner: this.ownerRegistry.get(tile.ownerId),
       waterAdjacent: isWaterAdjacent(this.grid, this.chihuahua.tile),
-    });
+    };
+  }
+
+  private updateBandit() {
+    const input = this.banditInput();
+    const { suppressMove } = this.banditController.tick(input); // drink/foul side effects, once per tick
     if (suppressMove) {
-      this.chiSprite.setTexture(`chi-${this.chihuahua.facing}-0`);
-      this.retintFouledTile(chiTile);
+      this.chiSprite.setTexture(`chi-${this.chihuahua.facing}-0`); // hold a still frame
+      this.retintFouledTile(input.tile);
     } else {
-      this.tryChiStep();
       this.chiSprite.setTexture(`chi-${this.chihuahua.facing}-${Math.floor(performance.now() / 160) % 2}`);
     }
-    ResourceSystem.applyHeat(this.chihuahua.inv, chiTile.heat);
+    ResourceSystem.applyHeat(this.chihuahua.inv, input.tile.heat);
+    this.tryChiStep(); // self-gates on chiMoving + the controller's shouldHold
     if (this.fovSet) {
       this.chiSprite.setVisible(this.fovSet.has(this.fkey(this.chihuahua.tile.col, this.chihuahua.tile.row)));
     }
@@ -229,6 +234,7 @@ export class GameScene extends Phaser.Scene {
 
   private tryChiStep() {
     if (this.over || this.chiMoving) return;
+    if (this.banditController.shouldHold(this.banditInput())) return; // committed: hold position
     const relieveTargets = buildRelieveTargets(this.map, this.ownerRegistry);
     const move = nextBanditMove(this.grid, this.chihuahua, this.foods, Math.random, relieveTargets);
     if (!move) return;
