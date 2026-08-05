@@ -121,4 +121,12 @@ describe('BanditController — shouldHold (movement gate)', () => {
     const c = new BanditController();
     expect(c.shouldHold({ inv: inv({ poop: 0, pee: 0 }), tile: tile('grass'), owner: owner(50), waterAdjacent: false })).toBe(false);
   });
+
+  it('does not trap him on a fully-maxed yard (no progress possible)', () => {
+    const c = new BanditController();
+    const maxed: Tile = { ...tile('grass'), dirt: config.POOP_MAX, destruction: config.PEE_MAX };
+    const input = { inv: inv({ poop: config.BANDIT_RELIEVE_THRESHOLD, pee: config.BANDIT_RELIEVE_THRESHOLD }), tile: maxed, owner: owner(80), waterAdjacent: false };
+    expect(c.shouldHold(input)).toBe(false);      // free to move on
+    expect(c.tick(input).suppressMove).toBe(false); // and tick agrees
+  });
 });

@@ -32,21 +32,35 @@ export class BanditController {
     return pooped || peed;
   }
 
+  // Whether a foul on this tile would actually accomplish anything — mirrors
+  // relieveOnce's guards (WorldActions.poop/pee): he must still be holding
+  // waste and the tile must have room. Prevents a stuck hold on a maxed yard.
+  private canMakeProgress(input: BanditTickInput): boolean {
+    const { tile, inv } = input;
+    const canPoop = inv.poop > 1 && tile.dirt + config.POOP_RATE <= config.POOP_MAX;
+    const canPee = inv.pee > 1 && tile.destruction + config.PEE_RATE <= config.PEE_MAX;
+    return canPoop || canPee;
+  }
+
+  // Should Bandit begin a foul here? On a yard, need high, not mid-refill, and the
+  // foul can actually make progress. Shared by shouldHold and tick so they agree.
+  private canStartRelieve(input: BanditTickInput): boolean {
+    return !this.refilling && input.tile.type === 'grass'
+      && needsRelieve(input.inv) && this.canMakeProgress(input);
+  }
+
   // Side-effect-free: would Bandit stay put on this tile this tick? Used to gate
   // the movement chain so he doesn't glide away from a commitment.
   shouldHold(input: BanditTickInput): boolean {
     if (this.relieving) return true;
     if (input.waterAdjacent && input.inv.water < config.WATER_CAP) return true;
-    if (!this.refilling && input.tile.type === 'grass' && needsRelieve(input.inv)) return true;
-    return false;
+    return this.canStartRelieve(input);
   }
 
   tick(input: BanditTickInput): { suppressMove: boolean } {
-    const onGrass = input.tile.type === 'grass';
-
     // Relieving: continue an in-progress foul, or start one on a yard when the
-    // need is high. Never started while a refill is in progress.
-    if (this.relieving || (!this.refilling && onGrass && needsRelieve(input.inv))) {
+    // need is high and the tile can take it. Never started while refilling.
+    if (this.relieving || this.canStartRelieve(input)) {
       this.relieving = true;
       if (!this.relieveOnce(input)) this.relieving = false; // spent, or tile maxed
       return { suppressMove: this.relieving };
