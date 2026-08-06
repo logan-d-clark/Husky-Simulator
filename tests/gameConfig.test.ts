@@ -31,6 +31,11 @@ describe('gameConfig', () => {
     }
   });
 
+  it('has the Bandit need tunables at their defaults', () => {
+    expect(DEFAULTS.BANDIT_GRAB_RADIUS).toBe(2);
+    expect(DEFAULTS.BANDIT_RELIEVE_THRESHOLD).toBe(30);
+  });
+
   describe('serializeConfig', () => {
     it('emits one KEY=value line per field', () => {
       const text = serializeConfig();

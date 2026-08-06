@@ -3,7 +3,8 @@ import { parseMap } from '../../src/world/MapParser';
 import { Grid } from '../../src/world/Grid';
 import {
   nextBanditMove, bestSmelledFood, bestFoodAnywhere, smellRadius, isThirsty,
-  patrolStep, banditTweenDuration, type Bandit,
+  patrolStep, banditTweenDuration, nearestFoodWithin, rankRelieveTargets,
+  type Bandit, type RelieveTarget,
 } from '../../src/systems/AISystem';
 import { config, resetConfig } from '../../src/config/gameConfig';
 import { banditSettings, resetBanditSettings } from '../../src/config/banditMode';
@@ -100,6 +101,7 @@ describe('nextBanditMove', () => {
   const rng = () => 0;
 
   it('chases the only smelled food (advanced mode)', () => {
+    banditSettings.omniscient = false;
     const foods: Food[] = [{ type: 'treat', value: 10, tile: { col: 4, row: 0 } }];
     expect(nextBanditMove(grid, bandit(0), foods, rng)).toEqual({ dir: 'right', mode: 'chase' });
   });
@@ -116,12 +118,45 @@ describe('nextBanditMove', () => {
     expect(nextBanditMove(waterGrid, thirsty, [], rng)).toEqual({ dir: 'right', mode: 'chase' });
   });
 
-  it('detects food exactly at the smell-range boundary', () => {
+  describe('opportunistic treat grab while thirsty', () => {
+    // Row0 is grass (treats), row1 is a pavement corridor ending in water at (4,1).
+    // A thirsty bandit at (0,1) beelines RIGHT to water; a grabbable treat above
+    // him at (0,0) pulls him UP first — so the two behaviours differ in direction.
+    const wgrid = new Grid(parseMap(['G0,G0,G0,G0,G0', 'P0,P0,P0,P0,W0'].join('\n')));
+    const thirsty = (): Bandit =>
+      ({ tile: { col: 0, row: 1 }, inv: { food: 50, water: config.WATER_CAP * 0.1, poop: 0, pee: 0 }, facing: 'right' });
+
+    it('diverts UP to a treat within the grab radius instead of beelining to water', () => {
+      const foods: Food[] = [{ type: 'treat', value: 10, tile: { col: 0, row: 0 } }]; // dist 1 <= radius
+      expect(nextBanditMove(wgrid, thirsty(), foods, rng)).toEqual({ dir: 'up', mode: 'chase' });
+    });
+
+    it('ignores a treat beyond the grab radius and heads RIGHT to water', () => {
+      const foods: Food[] = [{ type: 'treat', value: 10, tile: { col: 4, row: 0 } }]; // dist 5 > radius
+      expect(nextBanditMove(wgrid, thirsty(), foods, rng)).toEqual({ dir: 'right', mode: 'chase' });
+    });
+
+    it('picks the nearer of two treats within the radius', () => {
+      const near: Food = { type: 'treat', value: 10, tile: { col: 1, row: 0 } };
+      const far: Food = { type: 'bag', value: 40, tile: { col: config.BANDIT_GRAB_RADIUS, row: 0 } };
+      expect(nearestFoodWithin({ col: 0, row: 0 }, [far, near], config.BANDIT_GRAB_RADIUS)).toBe(near);
+    });
+
+    it('nearestFoodWithin is inclusive at the radius and excludes beyond it', () => {
+      const at: Food = { type: 'treat', value: 10, tile: { col: 3, row: 0 } };
+      expect(nearestFoodWithin({ col: 0, row: 0 }, [at], 3)).toBe(at);
+      expect(nearestFoodWithin({ col: 0, row: 0 }, [at], 2)).toBeNull();
+    });
+  });
+
+  it('detects food exactly at the smell-range boundary (advanced mode)', () => {
+    banditSettings.omniscient = false;
     const foods: Food[] = [{ type: 'treat', value: 10, tile: { col: config.SMELL_TREAT, row: 0 } }];
     expect(nextBanditMove(grid, bandit(0), foods, rng)?.mode).toBe('chase');
   });
 
-  it('ignores food one tile beyond the smell-range boundary', () => {
+  it('ignores food one tile beyond the smell-range boundary (advanced mode)', () => {
+    banditSettings.omniscient = false;
     const foods: Food[] = [{ type: 'treat', value: 10, tile: { col: config.SMELL_TREAT + 1, row: 0 } }];
     expect(nextBanditMove(grid, bandit(0), foods, rng)?.mode).toBe('patrol');
   });
@@ -135,6 +170,63 @@ describe('nextBanditMove', () => {
     it('patrols when no food exists anywhere', () => {
       banditSettings.omniscient = true;
       expect(nextBanditMove(grid, bandit(5), [], rng)?.mode).toBe('patrol');
+    });
+  });
+});
+
+describe('relieve targeting', () => {
+  const rng = () => 0;
+  const line = new Grid(parseMap('P0,P0,P0,P0,P0')); // 5 open pavement tiles
+  const highPoop = (col: number): Bandit =>
+    ({ tile: { col, row: 0 }, inv: { food: 50, water: 50, poop: config.BANDIT_RELIEVE_THRESHOLD, pee: 0 }, facing: 'right' });
+  const target = (col: number, affection: number): RelieveTarget => ({ tile: { col, row: 0 }, affection });
+
+  it('heads toward a reachable yard when poop is high', () => {
+    expect(nextBanditMove(line, highPoop(2), [], rng, [target(0, 50)])).toEqual({ dir: 'left', mode: 'chase' });
+  });
+
+  it('is triggered by a high pee need alone', () => {
+    const b: Bandit = { tile: { col: 2, row: 0 }, inv: { food: 50, water: 50, poop: 0, pee: config.BANDIT_RELIEVE_THRESHOLD }, facing: 'right' };
+    expect(nextBanditMove(line, b, [], rng, [target(4, 50)])).toEqual({ dir: 'right', mode: 'chase' });
+  });
+
+  it('picks the highest-affection yard', () => {
+    expect(nextBanditMove(line, highPoop(2), [], rng, [target(0, 20), target(4, 80)])?.dir).toBe('right');
+  });
+
+  it('breaks an affection tie by nearest', () => {
+    expect(nextBanditMove(line, highPoop(2), [], rng, [target(1, 50), target(4, 50)])?.dir).toBe('left');
+  });
+
+  it('skips an unreachable top yard for the next-best reachable one', () => {
+    const grid = new Grid(parseMap('P0,P0,H0')); // col 2 is a house — unreachable
+    // top-affection target is the house (unreachable); the reachable col-1 yard wins.
+    expect(nextBanditMove(grid, highPoop(0), [], rng, [target(2, 90), target(1, 50)])).toEqual({ dir: 'right', mode: 'chase' });
+  });
+
+  it('falls through to normal behaviour when no yard is reachable', () => {
+    const grid = new Grid(parseMap('P0,P0,H0'));
+    expect(nextBanditMove(grid, highPoop(0), [], rng, [target(2, 90)])?.mode).toBe('patrol');
+  });
+
+  it('does not relieve when the need is low', () => {
+    const lowNeed: Bandit = { tile: { col: 2, row: 0 }, inv: { food: 50, water: 50, poop: 0, pee: 0 }, facing: 'right' };
+    expect(nextBanditMove(line, lowNeed, [], rng, [target(0, 80)])?.mode).toBe('patrol');
+  });
+
+  describe('rankRelieveTargets', () => {
+    const from = { col: 0, row: 0 };
+    it('orders by affection descending', () => {
+      const ranked = rankRelieveTargets(from, [target(1, 20), target(2, 80), target(3, 50)]);
+      expect(ranked.map((t) => t.affection)).toEqual([80, 50, 20]);
+    });
+    it('breaks affection ties by nearest', () => {
+      const ranked = rankRelieveTargets(from, [target(3, 50), target(1, 50)]);
+      expect(ranked.map((t) => t.tile.col)).toEqual([1, 3]);
+    });
+    it('resolves a full affection+distance tie by stable original order', () => {
+      const a = target(1, 50); const b = { tile: { col: 1, row: 2 }, affection: 50 }; // same dist from (0,0)
+      expect(rankRelieveTargets(from, [a, b])).toEqual([a, b]);
     });
   });
 });
