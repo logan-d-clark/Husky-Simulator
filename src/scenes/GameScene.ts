@@ -139,6 +139,7 @@ export class GameScene extends Phaser.Scene {
       poop: this.husky.inv.poop, pee: this.husky.inv.pee,
       secondsLeft: this.secondsLeft,
       huskyFood: this.husky.inv.food, chiFood: this.chihuahua.inv.food,
+      chiWater: this.chihuahua.inv.water, chiPoop: this.chihuahua.inv.poop, chiPee: this.chihuahua.inv.pee,
       currentTile: { heat: t.heat, dirt: t.dirt, destruction: t.destruction, ownerId: t.ownerId },
     };
   }
