@@ -20,6 +20,13 @@ const BAR_W = 170, BAR_H = 14, BAR_R = 7;
 // smaller Food→Water gap than before. Bars sit BAR_DY below their text row.
 const ROW0 = 58, ROW_PITCH = 22, BAR_DY = 3;
 const ROW = (i: number): number => ROW0 + i * ROW_PITCH; // 0=food 1=water 2=poop 3=pee
+// Bandit's stat block sits in the gap between Blizzard's card (ends 358) and
+// Current Space (starts 694). Narrower than Blizzard's, with a dimmer accent so
+// the player reads it as the rival's (informational) stats, not their own. Its
+// card ends 16px and its bars 24px clear of the Current Space card.
+const BANDIT_CARD_X = 366, BANDIT_CARD_W = 312;
+const BANDIT_X = 378, BANDIT_BAR = 512, BANDIT_BAR_W = 158;
+const BANDIT_DIM = '#b7a482', BANDIT_BAR_ALPHA = 0.6;
 
 export class UIScene extends Phaser.Scene {
   private g!: Phaser.GameObjects.Graphics;
@@ -43,6 +50,7 @@ export class UIScene extends Phaser.Scene {
       panel.lineStyle(1, cream, 0.15).strokeRoundedRect(x, y0 + 30, w, HUD_H - 42, 10);
     };
     card(12, 346);                                   // Blizzard
+    card(BANDIT_CARD_X, BANDIT_CARD_W);              // Bandit (rival — dimmer)
     card(CS_X - 12, W - (CS_X - 12) - 20);           // Current Space
 
     this.g = this.add.graphics();
@@ -55,12 +63,18 @@ export class UIScene extends Phaser.Scene {
     mk('score', W - 24, y0 + 10, '17px', 1);
     // zone headers
     this.add.text(LEFT_X, y0 + 34, HUSKY_NAME.toUpperCase(), { color: '#ffd27f', fontSize: '13px', fontStyle: 'bold' });
+    this.add.text(BANDIT_X, y0 + 34, `🐕 ${CHI_NAME.toUpperCase()}`, { color: '#d8b06a', fontSize: '13px', fontStyle: 'bold' });
     this.add.text(CS_X, y0 + 34, 'CURRENT SPACE', { color: '#ffd27f', fontSize: '13px', fontStyle: 'bold' });
     // left zone (Blizzard) — food matches the other stat rows' size
     mk('food', LEFT_X, y0 + ROW(0), '15px');
     mk('waterL', LEFT_X, y0 + ROW(1));
     mk('poopL', LEFT_X, y0 + ROW(2));
     mk('peeL', LEFT_X, y0 + ROW(3));
+    // Bandit (rival) — mirrors Blizzard's rows, dimmer accent
+    mk('bFood', BANDIT_X, y0 + ROW(0), '15px', 0, BANDIT_DIM);
+    mk('bWater', BANDIT_X, y0 + ROW(1), '15px', 0, BANDIT_DIM);
+    mk('bPoop', BANDIT_X, y0 + ROW(2), '15px', 0, BANDIT_DIM);
+    mk('bPee', BANDIT_X, y0 + ROW(3), '15px', 0, BANDIT_DIM);
     // right zone (Current Space) — sub-column A
     mk('owner', CS_A, y0 + 58, '15px');
     mk('tolL', CS_A, y0 + 88);
@@ -80,12 +94,12 @@ export class UIScene extends Phaser.Scene {
     const y0 = DESIGN_HEIGHT;
     this.g.clear();
 
-    const bar = (x: number, y: number, val: number, max: number, color: string) => {
-      this.g.fillStyle(0x000000, 0.28).fillRoundedRect(x, y, BAR_W, BAR_H, BAR_R);
-      const f = Math.max(0, Math.min(1, val / max)) * BAR_W;
+    const bar = (x: number, y: number, val: number, max: number, color: string, w = BAR_W, alpha = 1) => {
+      this.g.fillStyle(0x000000, 0.28).fillRoundedRect(x, y, w, BAR_H, BAR_R);
+      const f = Math.max(0, Math.min(1, val / max)) * w;
       if (f > 1) {
         const rr = Math.min(BAR_R, f / 2);
-        this.g.fillStyle(Phaser.Display.Color.HexStringToColor(color).color, 1).fillRoundedRect(x, y, f, BAR_H, rr);
+        this.g.fillStyle(Phaser.Display.Color.HexStringToColor(color).color, alpha).fillRoundedRect(x, y, f, BAR_H, rr);
       }
     };
 
@@ -101,6 +115,16 @@ export class UIScene extends Phaser.Scene {
     this.texts.waterL.setText(`💧 Water ${s.water.toFixed(0)}`);
     this.texts.poopL.setText(`💩 Poop ${s.poop.toFixed(0)}`);
     this.texts.peeL.setText(`🟡 Pee ${s.pee.toFixed(0)}`);
+
+    // Bandit (rival) — same stats as Blizzard, dimmer bars/text.
+    bar(BANDIT_BAR, y0 + ROW(1) + BAR_DY, s.chiWater, config.WATER_CAP, PALETTE.water, BANDIT_BAR_W, BANDIT_BAR_ALPHA);
+    bar(BANDIT_BAR, y0 + ROW(2) + BAR_DY, s.chiPoop, config.POOP_MAX, PALETTE.fence, BANDIT_BAR_W, BANDIT_BAR_ALPHA);
+    bar(BANDIT_BAR, y0 + ROW(3) + BAR_DY, s.chiPee, config.PEE_MAX, PALETTE.affection, BANDIT_BAR_W, BANDIT_BAR_ALPHA);
+    const n0 = (v: number) => Math.max(0, v).toFixed(0); // never show a transient "-0"
+    this.texts.bFood.setText(`🍖 Food ${n0(s.chiFood)}`);
+    this.texts.bWater.setText(`💧 Water ${n0(s.chiWater)}`);
+    this.texts.bPoop.setText(`💩 Poop ${n0(s.chiPoop)}`);
+    this.texts.bPee.setText(`🟡 Pee ${n0(s.chiPee)}`);
 
     // Header
     const mm = Math.floor(s.secondsLeft / 60), ss = s.secondsLeft % 60;
