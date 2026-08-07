@@ -32,9 +32,9 @@ describe('BanditController — water refill', () => {
 
   it('gains exactly WATER_VALUE on a drinking tick (same as Blizzard)', () => {
     const c = new BanditController();
-    const bInv = inv({ water: 50 });
+    const bInv = inv({ water: 10 }); // thirsty
     c.tick({ inv: bInv, tile: tile('pavement'), owner: owner(80), waterAdjacent: true });
-    const zInv = inv({ water: 50 });
+    const zInv = inv({ water: 10 });
     ResourceSystem.drink(zInv);
     expect(bInv.water).toBe(zInv.water);
   });
@@ -47,15 +47,28 @@ describe('BanditController — water refill', () => {
     expect(i.water).toBe(config.WATER_CAP);
   });
 
+  it('only drinks when thirsty — a heat nibble below the cap does not re-trigger a refill', () => {
+    const c = new BanditController();
+    const i = inv({ water: 10 });
+    while (c.tick({ inv: i, tile: tile('pavement'), owner: owner(80), waterAdjacent: true }).suppressMove) { /* fill */ }
+    expect(i.water).toBe(config.WATER_CAP);
+    // Heat shaves a hair off each tick; well above the thirst threshold he must NOT re-commit.
+    i.water = config.WATER_CAP - 0.05;
+    const input = { inv: i, tile: tile('pavement'), owner: owner(80), waterAdjacent: true };
+    expect(c.tick(input).suppressMove).toBe(false);
+    expect(c.shouldHold(input)).toBe(false);
+    expect(i.water).toBe(config.WATER_CAP - 0.05); // did not drink
+  });
+
   it('does not interrupt an in-progress refill when a relieve need arises', () => {
     const c = new BanditController();
-    const i = inv({ water: 100, poop: 0 });
-    c.tick({ inv: i, tile: tile('grass'), owner: owner(80), waterAdjacent: true }); // refill starts
+    const i = inv({ water: 10, poop: 0 }); // thirsty
+    c.tick({ inv: i, tile: tile('grass'), owner: owner(80), waterAdjacent: true }); // refill starts -> 20
     i.poop = config.BANDIT_RELIEVE_THRESHOLD + 20; // need crosses threshold mid-refill
     const res = c.tick({ inv: i, tile: tile('grass'), owner: owner(80), waterAdjacent: true });
     expect(res.suppressMove).toBe(true);
     expect(i.poop).toBe(config.BANDIT_RELIEVE_THRESHOLD + 20); // NOT drained — still refilling
-    expect(i.water).toBe(120); // kept drinking
+    expect(i.water).toBe(30); // kept drinking (10 -> 20 -> 30)
   });
 });
 
@@ -109,9 +122,14 @@ describe('BanditController — shouldHold (movement gate)', () => {
     const c = new BanditController();
     expect(c.shouldHold({ inv: inv({ poop: config.BANDIT_RELIEVE_THRESHOLD }), tile: tile('grass'), owner: owner(50), waterAdjacent: false })).toBe(true);
   });
-  it('holds next to water while below the cap', () => {
+  it('holds next to water while thirsty', () => {
     const c = new BanditController();
     expect(c.shouldHold({ inv: inv({ water: 10 }), tile: tile('pavement'), owner: owner(50), waterAdjacent: true })).toBe(true);
+  });
+  it('does not hold next to water when not thirsty (topped up)', () => {
+    const c = new BanditController();
+    // water above the thirst threshold but below the cap (a heat nibble) must not hold him
+    expect(c.shouldHold({ inv: inv({ water: config.WATER_CAP - 0.05 }), tile: tile('pavement'), owner: owner(50), waterAdjacent: true })).toBe(false);
   });
   it('does not hold on pavement with a low need and full water', () => {
     const c = new BanditController();

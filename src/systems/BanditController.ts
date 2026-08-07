@@ -4,7 +4,7 @@ import type { Owner } from '../entities/Owner';
 import { config } from '../config/gameConfig';
 import { ResourceSystem } from './ResourceSystem';
 import { WorldActions } from './WorldActions';
-import { needsRelieve } from './AISystem';
+import { needsRelieve, isThirsty } from './AISystem';
 
 export interface BanditTickInput {
   inv: Inventory;
@@ -49,12 +49,19 @@ export class BanditController {
       && needsRelieve(input.inv) && this.canMakeProgress(input);
   }
 
+  // Should Bandit begin (or continue) a full refill here? He commits when he
+  // arrives thirsty; the `refilling` latch then holds him until full. Keyed on
+  // thirst — NOT `water < cap` — so the per-tick heat nibble can't re-trigger a
+  // drink the instant he tops up (which would trap him at the water forever).
+  private canStartRefill(input: BanditTickInput): boolean {
+    return input.waterAdjacent && isThirsty(input.inv);
+  }
+
   // Side-effect-free: would Bandit stay put on this tile this tick? Used to gate
   // the movement chain so he doesn't glide away from a commitment.
   shouldHold(input: BanditTickInput): boolean {
-    if (this.relieving) return true;
-    if (input.waterAdjacent && input.inv.water < config.WATER_CAP) return true;
-    return this.canStartRelieve(input);
+    if (this.relieving || this.canStartRelieve(input)) return true;
+    return this.refilling || this.canStartRefill(input);
   }
 
   tick(input: BanditTickInput): { suppressMove: boolean } {
@@ -66,9 +73,8 @@ export class BanditController {
       return { suppressMove: this.relieving };
     }
 
-    // Refilling: continue while still next to water and below the cap. The
-    // waterAdjacent re-check aborts the commitment if he ever leaves the edge.
-    if (this.refilling || (input.waterAdjacent && input.inv.water < config.WATER_CAP)) {
+    // Refilling: start when he arrives thirsty, then drink each tick until full.
+    if (this.refilling || this.canStartRefill(input)) {
       const canDrink = input.waterAdjacent && input.inv.water < config.WATER_CAP;
       if (canDrink) { this.refilling = true; ResourceSystem.drink(input.inv); }
       if (!canDrink || input.inv.water >= config.WATER_CAP) this.refilling = false;
