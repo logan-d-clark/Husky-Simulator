@@ -1,8 +1,17 @@
 import type { Grid } from '../world/Grid';
 import type { Direction, TileCoord, Inventory, FoodType } from '../types';
+import type { Tile } from '../world/tiles';
 import type { Food } from '../entities/Food';
 import { config } from '../config/gameConfig';
 import { banditSettings } from '../config/banditMode';
+import { WorldActions } from './WorldActions';
+
+// A family-yard tile Bandit could still foul: grass with room for the waste he's
+// holding. Delegates to WorldActions' capacity guards (single source of truth) so
+// the AI's targeting and the controller's fouling can never disagree.
+export function canFoulTile(inv: Inventory, tile: Tile): boolean {
+  return WorldActions.canPoop({ inv }, tile) || WorldActions.canPee({ inv }, tile);
+}
 
 const DIRS: Direction[] = ['up', 'down', 'left', 'right'];
 const key = (c: number, r: number): string => `${c},${r}`;
@@ -149,6 +158,20 @@ export function needsRelieve(inv: Inventory): boolean {
   return inv.poop >= config.BANDIT_RELIEVE_THRESHOLD || inv.pee >= config.BANDIT_RELIEVE_THRESHOLD;
 }
 
+// The relieve target Bandit heads for: the nearest available tile of the
+// highest-affection *reachable* yard (walk the affection-ranked list, take the
+// first with a path). Returns the tile (so the caller can see which yard) and
+// the first step toward it, or null when none is reachable. Pure.
+export function firstReachableRelieveTarget(
+  grid: Grid, from: TileCoord, relieveTargets: RelieveTarget[],
+): { tile: TileCoord; dir: Direction } | null {
+  for (const target of rankRelieveTargets(from, relieveTargets)) {
+    const dir = bfsFirstStep(grid, from, (t) => t.col === target.tile.col && t.row === target.tile.row);
+    if (dir) return { tile: target.tile, dir };
+  }
+  return null;
+}
+
 // Bandit's next move, in priority order: foul the most-liked reachable yard when
 // his need is high (foil to camping), else seek water when thirsty — grabbing an
 // easy treat en route — else head for the best food (smell-gated in advanced mode,
@@ -156,14 +179,14 @@ export function needsRelieve(inv: Inventory): boolean {
 // goal-directed moves are full-speed chases. Reads the live omniscient flag so a
 // dev-panel toggle takes effect on the next move.
 export function nextBanditMove(
-  grid: Grid, bandit: Bandit, foods: Food[], rng: () => number, relieveTargets: RelieveTarget[] = [],
+  grid: Grid, bandit: Bandit, foods: Food[], rng: () => number,
+  relieveTargets: RelieveTarget[] = [], emptying = false,
 ): BanditMove | null {
-  // Foil first: when his need is high, head for the most-liked reachable yard.
-  if (needsRelieve(bandit.inv)) {
-    for (const target of rankRelieveTargets(bandit.tile, relieveTargets)) {
-      const toYard = bfsFirstStep(grid, bandit.tile, (t) => t.col === target.tile.col && t.row === target.tile.row);
-      if (toYard) return { dir: toYard, mode: 'chase' };
-    }
+  // Foil first: head for the most-liked reachable yard when his need is high OR
+  // he's mid-empty-out (so he keeps finishing on more tiles below the threshold).
+  if (needsRelieve(bandit.inv) || emptying) {
+    const target = firstReachableRelieveTarget(grid, bandit.tile, relieveTargets);
+    if (target) return { dir: target.dir, mode: 'chase' };
   }
   if (isThirsty(bandit.inv)) {
     // Grab an easy treat en route to the water before beelining for it.

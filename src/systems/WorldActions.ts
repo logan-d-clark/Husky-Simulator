@@ -9,17 +9,23 @@ import { config } from '../config/gameConfig';
 type Actor = { inv: Inventory };
 
 export const WorldActions = {
+  // Single source of truth for "would a poop/pee here actually drop something":
+  // a grass tile, waste still above the floor, and room left on that channel.
+  canPoop(actor: Actor, tile: Tile): boolean {
+    return tile.type === 'grass' && actor.inv.poop > 1 && tile.dirt + config.POOP_RATE <= config.POOP_MAX;
+  },
+  canPee(actor: Actor, tile: Tile): boolean {
+    return tile.type === 'grass' && actor.inv.pee > 1 && tile.destruction + config.PEE_RATE <= config.PEE_MAX;
+  },
   poop(actor: Actor, tile: Tile, owner: Owner): boolean {
-    if (tile.type !== 'grass' || actor.inv.poop <= 1) return false;
-    if (tile.dirt + config.POOP_RATE > config.POOP_MAX) return false;
+    if (!this.canPoop(actor, tile)) return false;
     actor.inv.poop = Math.max(0, actor.inv.poop - config.POOP_RATE);
     tile.dirt += config.POOP_RATE;
     AffectionSystem.applyAction(owner, 'poop');
     return true;
   },
   pee(actor: Actor, tile: Tile, owner: Owner): boolean {
-    if (tile.type !== 'grass' || actor.inv.pee <= 1) return false;
-    if (tile.destruction + config.PEE_RATE > config.PEE_MAX) return false;
+    if (!this.canPee(actor, tile)) return false;
     actor.inv.pee = Math.max(0, actor.inv.pee - config.PEE_RATE);
     tile.destruction += config.PEE_RATE;
     AffectionSystem.applyAction(owner, 'pee');

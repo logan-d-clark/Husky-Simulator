@@ -4,7 +4,7 @@ import type { Owner } from '../entities/Owner';
 import { config } from '../config/gameConfig';
 import { ResourceSystem } from './ResourceSystem';
 import { WorldActions } from './WorldActions';
-import { needsRelieve, isThirsty } from './AISystem';
+import { needsRelieve, isThirsty, canFoulTile } from './AISystem';
 
 export interface BanditTickInput {
   inv: Inventory;
@@ -21,32 +21,20 @@ export interface BanditTickInput {
 // ResourceSystem/WorldActions at the same rates.
 export class BanditController {
   private refilling = false;
-  private relieving = false;
+  // Empty-out episode: turns on when his need crosses the go-relieve threshold,
+  // and stays on until poop AND pee are both spent — so once he starts he fully
+  // empties (spilling onto more tiles as they fill), even below the threshold.
+  private emptying = false;
 
-  // Drain both poop and pee once onto the current yard. Returns whether anything
-  // actually drained (false once he's spent or the tile can take no more).
-  private relieveOnce(input: BanditTickInput): boolean {
+  /** True while Bandit is committed to fully emptying — GameScene reads this to
+   *  keep building relieve targets and to tell the AI to keep heading to yards. */
+  isEmptying(): boolean { return this.emptying; }
+
+  // Drain both poop and pee once onto the current yard.
+  private relieveOnce(input: BanditTickInput): void {
     const actor = { inv: input.inv };
-    const pooped = WorldActions.poop(actor, input.tile, input.owner);
-    const peed = WorldActions.pee(actor, input.tile, input.owner);
-    return pooped || peed;
-  }
-
-  // Whether a foul on this tile would actually accomplish anything — mirrors
-  // relieveOnce's guards (WorldActions.poop/pee): he must still be holding
-  // waste and the tile must have room. Prevents a stuck hold on a maxed yard.
-  private canMakeProgress(input: BanditTickInput): boolean {
-    const { tile, inv } = input;
-    const canPoop = inv.poop > 1 && tile.dirt + config.POOP_RATE <= config.POOP_MAX;
-    const canPee = inv.pee > 1 && tile.destruction + config.PEE_RATE <= config.PEE_MAX;
-    return canPoop || canPee;
-  }
-
-  // Should Bandit begin a foul here? On a yard, need high, not mid-refill, and the
-  // foul can actually make progress. Shared by shouldHold and tick so they agree.
-  private canStartRelieve(input: BanditTickInput): boolean {
-    return !this.refilling && input.tile.type === 'grass'
-      && needsRelieve(input.inv) && this.canMakeProgress(input);
+    WorldActions.poop(actor, input.tile, input.owner);
+    WorldActions.pee(actor, input.tile, input.owner);
   }
 
   // Should Bandit begin (or continue) a full refill here? He commits when he
@@ -58,19 +46,30 @@ export class BanditController {
   }
 
   // Side-effect-free: would Bandit stay put on this tile this tick? Used to gate
-  // the movement chain so he doesn't glide away from a commitment.
-  shouldHold(input: BanditTickInput): boolean {
-    if (this.relieving || this.canStartRelieve(input)) return true;
+  // the movement chain so he doesn't glide away from a commitment. He only holds
+  // to foul when he's on the yard the AI is targeting (the highest-affection
+  // reachable one) — so he travels to the most-liked yard rather than fouling
+  // whatever grass is under his feet.
+  shouldHold(input: BanditTickInput, onTargetYard: boolean): boolean {
+    if (!this.refilling && (this.emptying || needsRelieve(input.inv)) && onTargetYard && canFoulTile(input.inv, input.tile)) return true;
     return this.refilling || this.canStartRefill(input);
   }
 
-  tick(input: BanditTickInput): { suppressMove: boolean } {
-    // Relieving: continue an in-progress foul, or start one on a yard when the
-    // need is high and the tile can take it. Never started while refilling.
-    if (this.relieving || this.canStartRelieve(input)) {
-      this.relieving = true;
-      if (!this.relieveOnce(input)) this.relieving = false; // spent, or tile maxed
-      return { suppressMove: this.relieving };
+  tick(input: BanditTickInput, onTargetYard: boolean): { suppressMove: boolean } {
+    // Empty-out episode latch: off once fully spent, on once the need is high.
+    if (input.inv.poop <= 1 && input.inv.pee <= 1) this.emptying = false;
+    else if (needsRelieve(input.inv)) this.emptying = true;
+
+    // While emptying (and not mid-refill): foul the current tile only when it's
+    // in the yard he's targeting and it can take it (hold + drain); otherwise
+    // release so he keeps travelling to that yard's available tiles. He keeps
+    // going until fully spent, spilling onto more of the yard's tiles as they fill.
+    if (this.emptying && !this.refilling) {
+      if (onTargetYard && canFoulTile(input.inv, input.tile)) {
+        this.relieveOnce(input);
+        return { suppressMove: true };
+      }
+      return { suppressMove: false };
     }
 
     // Refilling: start when he arrives thirsty, then drink each tick until full.

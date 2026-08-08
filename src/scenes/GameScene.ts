@@ -9,7 +9,7 @@ import { Husky } from '../entities/Husky';
 import { Chihuahua } from '../entities/Chihuahua';
 import { ResourceSystem } from '../systems/ResourceSystem';
 import { WorldActions } from '../systems/WorldActions';
-import { nextBanditMove, banditTweenDuration, isWaterAdjacent } from '../systems/AISystem';
+import { nextBanditMove, banditTweenDuration, isWaterAdjacent, firstReachableRelieveTarget, type RelieveTarget } from '../systems/AISystem';
 import { OwnerRegistry, dispenseOverMap, buildRelieveTargets } from '../systems/OwnerRegistry';
 import { BanditController, type BanditTickInput } from '../systems/BanditController';
 import { createBadges, updateBadges, type Badge } from '../ui/HouseholdProfile';
@@ -211,9 +211,22 @@ export class GameScene extends Phaser.Scene {
     };
   }
 
+  // Bandit's relieve context this tick: whether he's emptying, the available
+  // relieve-target tiles, and whether he's standing on the yard he's targeting
+  // (the highest-affection reachable one). Empty/false when he isn't emptying.
+  private chiRelieveContext(): { emptying: boolean; relieveTargets: RelieveTarget[]; onTargetYard: boolean } {
+    if (!this.banditController.isEmptying()) return { emptying: false, relieveTargets: [], onTargetYard: false };
+    const relieveTargets = buildRelieveTargets(this.map, this.ownerRegistry, this.chihuahua.inv);
+    const target = firstReachableRelieveTarget(this.grid, this.chihuahua.tile, relieveTargets);
+    const targetOwnerId = target ? this.map.tiles[target.tile.row][target.tile.col].ownerId : -1;
+    const here = this.map.tiles[this.chihuahua.tile.row][this.chihuahua.tile.col];
+    return { emptying: true, relieveTargets, onTargetYard: here.ownerId === targetOwnerId };
+  }
+
   private updateBandit() {
     const input = this.banditInput();
-    const { suppressMove } = this.banditController.tick(input); // drink/foul side effects, once per tick
+    const { onTargetYard } = this.chiRelieveContext();
+    const { suppressMove } = this.banditController.tick(input, onTargetYard); // drink/foul side effects, once per tick
     if (suppressMove) {
       this.chiSprite.setTexture(`chi-${this.chihuahua.facing}-0`); // hold a still frame
       this.retintFouledTile(input.tile);
@@ -235,9 +248,9 @@ export class GameScene extends Phaser.Scene {
 
   private tryChiStep() {
     if (this.over || this.chiMoving) return;
-    if (this.banditController.shouldHold(this.banditInput())) return; // committed: hold position
-    const relieveTargets = buildRelieveTargets(this.map, this.ownerRegistry);
-    const move = nextBanditMove(this.grid, this.chihuahua, this.foods, Math.random, relieveTargets);
+    const { emptying, relieveTargets, onTargetYard } = this.chiRelieveContext();
+    if (this.banditController.shouldHold(this.banditInput(), onTargetYard)) return; // committed: hold position
+    const move = nextBanditMove(this.grid, this.chihuahua, this.foods, Math.random, relieveTargets, emptying);
     if (!move) return;
     this.chihuahua.facing = move.dir;
     const to = this.grid.neighbor(this.chihuahua.tile, move.dir);
@@ -338,7 +351,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   private onChiEnterTile() {
-    // Eat any food on this tile...
+    // Eat any food on this tile. Relieving is handled entirely by BanditController
+    // (targeted at the highest-affection yard) — no autoDump, which would foul any
+    // tile he passes through and bypass that targeting.
     const food = takeFoodAt(this.foods, this.chihuahua.tile.col, this.chihuahua.tile.row);
     if (food) {
       ResourceSystem.eatFood(this.chihuahua.inv, food.value);
@@ -347,9 +362,6 @@ export class GameScene extends Phaser.Scene {
       this.foodSprites.get(key)?.destroy();
       this.foodSprites.delete(key);
     }
-    // ...and relieve himself when full, dropping the yard's affection like Blizzard.
-    const tile = this.map.tiles[this.chihuahua.tile.row][this.chihuahua.tile.col];
-    WorldActions.autoDump(this.chihuahua, tile, this.ownerRegistry.get(tile.ownerId));
   }
 
   private fkey(c: number, r: number) { return `${c},${r}`; }

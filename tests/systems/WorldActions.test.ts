@@ -4,6 +4,7 @@ import { Husky } from '../../src/entities/Husky';
 import { Owner } from '../../src/entities/Owner';
 import { emptyFences } from '../../src/world/tiles';
 import type { Tile } from '../../src/world/tiles';
+import { config } from '../../src/config/gameConfig';
 
 const grass = (): Tile => ({
   col: 0, row: 0, type: 'grass', ownerId: 5, fences: emptyFences(),
@@ -38,5 +39,36 @@ describe('WorldActions', () => {
     WorldActions.autoDump(h, t, o);
     expect(h.inv.poop).toBeLessThan(100);
     expect(t.dirt).toBeGreaterThan(0);
+  });
+
+  describe('canPoop / canPee capacity guards', () => {
+    const actor = (poop: number, pee: number) => ({ inv: { food: 0, water: 0, poop, pee } });
+    it('canPoop true on grass with waste above the floor and room', () => {
+      expect(WorldActions.canPoop(actor(10, 0), grass())).toBe(true);
+    });
+    it('canPoop false at the floor', () => {
+      expect(WorldActions.canPoop(actor(1, 0), grass())).toBe(false);
+    });
+    it('canPoop false when the tile dirt is maxed', () => {
+      const t = grass(); t.dirt = config.POOP_MAX;
+      expect(WorldActions.canPoop(actor(10, 0), t)).toBe(false);
+    });
+    it('canPoop false on non-grass', () => {
+      const t = grass(); t.type = 'pavement';
+      expect(WorldActions.canPoop(actor(10, 0), t)).toBe(false);
+    });
+    it('canPee mirrors canPoop on the destruction channel', () => {
+      expect(WorldActions.canPee(actor(0, 10), grass())).toBe(true);
+      const maxed = grass(); maxed.destruction = config.PEE_MAX;
+      expect(WorldActions.canPee(actor(0, 10), maxed)).toBe(false);
+    });
+    it('poop/pee agree with their guards at the exact boundary', () => {
+      const nearMax = grass(); nearMax.dirt = config.POOP_MAX - config.POOP_RATE; // exactly one more fits
+      expect(WorldActions.canPoop(actor(10, 0), nearMax)).toBe(true);
+      expect(WorldActions.poop(actor(10, 0), nearMax, owner())).toBe(true);
+      const atMax = grass(); atMax.dirt = config.POOP_MAX;
+      expect(WorldActions.canPoop(actor(10, 0), atMax)).toBe(false);
+      expect(WorldActions.poop(actor(10, 0), atMax, owner())).toBe(false);
+    });
   });
 });
