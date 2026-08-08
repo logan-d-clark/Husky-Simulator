@@ -13,15 +13,24 @@ describe('OwnerRegistry', () => {
     const c = yardCentroid(map, 7);
     expect(c).toEqual({ col: 0, row: 0 }); // rounded average of cols {0,1}, rows {0,1} = (0.5,0.5)->round->(1,1)? see note
   });
-  it('builds one relieve target per family yard, excluding public/street', () => {
-    // owner 2 has a grass yard; the rest of the map is public (0) pavement/water.
+  const holding = (poop: number, pee = 0) => ({ food: 0, water: 0, poop, pee });
+
+  it('yields one target per available family-yard tile, excluding public/street', () => {
+    // owner 2 owns two grass tiles; the rest is public (0) pavement/water.
     const map = parseMap('G2,P0,W0\nG2,P0,P0');
     const reg = new OwnerRegistry();
-    const targets = buildRelieveTargets(map, reg);
-    expect(targets).toHaveLength(1);
-    expect(targets[0].affection).toBe(reg.get(2).affection);
-    // The public owner (id 0) contributes no target (it owns no grass).
-    expect(yardCentroid(map, 0)).toBeNull();
+    const targets = buildRelieveTargets(map, reg, holding(40));
+    expect(targets).toHaveLength(2); // both grass-2 tiles are foulable
+    expect(targets.every((t) => t.affection === reg.get(2).affection)).toBe(true);
+    expect(targets.every((t) => map.tiles[t.tile.row][t.tile.col].ownerId === 2)).toBe(true);
+  });
+
+  it('excludes maxed tiles, and yields nothing when he holds no drainable waste', () => {
+    const map = parseMap('G2,G2');
+    const reg = new OwnerRegistry();
+    map.tiles[0][0].dirt = 100; // POOP_MAX — this tile is full for poop
+    expect(buildRelieveTargets(map, reg, holding(40))).toHaveLength(1); // only the open tile
+    expect(buildRelieveTargets(map, reg, holding(1))).toHaveLength(0);  // holds nothing drainable
   });
 
   it('dispense emits food when roll succeeds', () => {

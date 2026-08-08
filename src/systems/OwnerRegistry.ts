@@ -3,8 +3,8 @@ import { Owner } from '../entities/Owner';
 import { AffectionSystem } from './AffectionSystem';
 import { foodValue, type Food } from '../entities/Food';
 import type { GameMap } from '../world/MapParser';
-import type { TileCoord } from '../types';
-import type { RelieveTarget } from './AISystem';
+import type { TileCoord, Inventory } from '../types';
+import { canFoulTile, type RelieveTarget } from './AISystem';
 
 export class OwnerRegistry {
   private byId = new Map<number, Owner>();
@@ -34,14 +34,18 @@ export function yardCentroid(map: GameMap, ownerId: number): TileCoord | null {
   return best;
 }
 
-// Bandit's relieve targets: one per family yard (its centroid tile + the owner's
-// current affection). The public/street owner has no grass, so `yardCentroid`
-// returns null for it and it is naturally excluded — Bandit only fouls yards.
-export function buildRelieveTargets(map: GameMap, reg: OwnerRegistry): RelieveTarget[] {
+// Bandit's relieve targets: one per **available** (foulable) family-yard grass
+// tile, tagged with its owner's current affection. He then heads for the nearest
+// available tile of the most-liked yard, spreading across the yard as tiles fill
+// and only moving on when a whole yard is full. The public/street owner (id 0)
+// is excluded — Bandit only fouls family yards.
+export function buildRelieveTargets(map: GameMap, reg: OwnerRegistry, inv: Inventory): RelieveTarget[] {
   const targets: RelieveTarget[] = [];
-  for (const owner of reg.all()) {
-    const centroid = yardCentroid(map, owner.id);
-    if (centroid) targets.push({ tile: centroid, affection: owner.affection });
+  for (const row of map.tiles) {
+    for (const t of row) {
+      if (t.type !== 'grass' || t.ownerId === 0 || !canFoulTile(inv, t)) continue;
+      targets.push({ tile: { col: t.col, row: t.row }, affection: reg.get(t.ownerId).affection });
+    }
   }
   return targets;
 }

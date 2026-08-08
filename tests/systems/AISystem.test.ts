@@ -3,9 +3,10 @@ import { parseMap } from '../../src/world/MapParser';
 import { Grid } from '../../src/world/Grid';
 import {
   nextBanditMove, bestSmelledFood, bestFoodAnywhere, smellRadius, isThirsty,
-  patrolStep, banditTweenDuration, nearestFoodWithin, rankRelieveTargets,
+  patrolStep, banditTweenDuration, nearestFoodWithin, rankRelieveTargets, canFoulTile,
   type Bandit, type RelieveTarget,
 } from '../../src/systems/AISystem';
+import { emptyFences, type Tile } from '../../src/world/tiles';
 import { config, resetConfig } from '../../src/config/gameConfig';
 import { banditSettings, resetBanditSettings } from '../../src/config/banditMode';
 import type { Food } from '../../src/entities/Food';
@@ -228,6 +229,49 @@ describe('relieve targeting', () => {
       const a = target(1, 50); const b = { tile: { col: 1, row: 2 }, affection: 50 }; // same dist from (0,0)
       expect(rankRelieveTargets(from, [a, b])).toEqual([a, b]);
     });
+  });
+});
+
+describe('canFoulTile', () => {
+  const gtile = (over: Partial<Tile> = {}): Tile =>
+    ({ col: 0, row: 0, type: 'grass', ownerId: 2, fences: emptyFences(), heat: 0, dirt: 0, destruction: 0, foodPresent: false, ...over });
+  const inv = (poop: number, pee: number) => ({ food: 0, water: 0, poop, pee });
+
+  it('true on a grass tile with a held-waste channel that has room', () => {
+    expect(canFoulTile(inv(40, 0), gtile())).toBe(true);
+  });
+  it('false when the held-waste (poop) channel is maxed even if the other has room', () => {
+    expect(canFoulTile(inv(40, 0), gtile({ dirt: config.POOP_MAX }))).toBe(false);
+  });
+  it('false when the held-waste (pee) channel is maxed even if the other has room', () => {
+    expect(canFoulTile(inv(0, 40), gtile({ destruction: config.PEE_MAX }))).toBe(false);
+  });
+  it('false when he holds no drainable waste (tile has room)', () => {
+    expect(canFoulTile(inv(1, 0), gtile())).toBe(false);
+  });
+  it('false on a non-grass tile', () => {
+    expect(canFoulTile(inv(40, 40), gtile({ type: 'pavement' }))).toBe(false);
+  });
+  it('boundary: room for exactly one more is foulable, at the cap is not', () => {
+    expect(canFoulTile(inv(40, 0), gtile({ dirt: config.POOP_MAX - config.POOP_RATE }))).toBe(true);
+    expect(canFoulTile(inv(40, 0), gtile({ dirt: config.POOP_MAX }))).toBe(false);
+  });
+});
+
+describe('nextBanditMove — empty-out gate', () => {
+  const line = new Grid(parseMap('P0,P0,P0,P0,P0'));
+  const target = (col: number, affection: number): RelieveTarget => ({ tile: { col, row: 0 }, affection });
+  const at = (col: number, inv: Partial<Bandit['inv']>): Bandit =>
+    ({ tile: { col, row: 0 }, inv: { food: 50, water: 50, poop: 0, pee: 0, ...inv }, facing: 'right' });
+
+  it('heads to a relieve target while emptying even below the threshold', () => {
+    // pee 20 < BANDIT_RELIEVE_THRESHOLD(30): only pursued because emptying is true.
+    const move = nextBanditMove(line, at(2, { pee: 20 }), [], () => 0, [target(0, 50)], true);
+    expect(move).toEqual({ dir: 'left', mode: 'chase' });
+  });
+  it('does not pursue a relieve target at a sub-threshold need when not emptying', () => {
+    const move = nextBanditMove(line, at(2, { pee: 20 }), [], () => 0, [target(0, 50)], false);
+    expect(move?.mode).toBe('patrol');
   });
 });
 
