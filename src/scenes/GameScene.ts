@@ -234,7 +234,7 @@ export class GameScene extends Phaser.Scene {
       this.chiSprite.setTexture(`chi-${this.chihuahua.facing}-${Math.floor(performance.now() / 160) % 2}`);
     }
     ResourceSystem.applyHeat(this.chihuahua.inv, input.tile.heat);
-    this.tryChiStep(); // self-gates on chiMoving + the controller's shouldHold
+    if (!suppressMove) this.tryChiStep(); // held this tick? don't also re-decide movement (avoids a 1-frame still→glide)
     if (this.fovSet) {
       this.chiSprite.setVisible(this.fovSet.has(this.fkey(this.chihuahua.tile.col, this.chihuahua.tile.row)));
     }

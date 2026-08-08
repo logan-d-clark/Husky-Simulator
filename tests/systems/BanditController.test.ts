@@ -182,6 +182,20 @@ describe('BanditController — empty-out episode', () => {
     expect(c.isEmptying()).toBe(true);     // but still committed to emptying
   });
 
+  it('does not freeze when emptying + thirsty at the water off his target yard', () => {
+    // Regression: tick's emptying branch preempts refill (drinks nothing while
+    // emptying); shouldHold must agree and NOT hold him for a refill, or he'd be
+    // pinned at the water's edge doing nothing forever.
+    const c = new BanditController();
+    const i = inv({ water: 5, poop: config.BANDIT_RELIEVE_THRESHOLD }); // thirsty AND high need
+    const input = { inv: i, tile: tile('pavement'), owner: owner(80), waterAdjacent: true };
+    const r = c.tick(input, OFF_TARGET); // sets emptying (needsRelieve); not on a foulable target tile
+    expect(c.isEmptying()).toBe(true);
+    expect(r.suppressMove).toBe(false);           // does not hold — no drink, no drain
+    expect(c.shouldHold(input, OFF_TARGET)).toBe(false); // shouldHold agrees → he moves on
+    expect(i.water).toBe(5);                       // did NOT drink (emptying preempts refill)
+  });
+
   it('does not trap him on a fully-maxed target tile (no progress possible)', () => {
     const c = new BanditController();
     const maxed: Tile = { ...tile('grass'), dirt: config.POOP_MAX, destruction: config.PEE_MAX };

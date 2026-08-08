@@ -52,7 +52,10 @@ export class BanditController {
   // whatever grass is under his feet.
   shouldHold(input: BanditTickInput, onTargetYard: boolean): boolean {
     if (!this.refilling && (this.emptying || needsRelieve(input.inv)) && onTargetYard && canFoulTile(input.inv, input.tile)) return true;
-    return this.refilling || this.canStartRefill(input);
+    // Mirror tick: while emptying (and not already refilling) the refill branch is
+    // never reached, so shouldHold must NOT hold him for a would-be refill either —
+    // otherwise he'd be held at the water's edge while tick drinks/drains nothing.
+    return this.refilling || (!this.emptying && this.canStartRefill(input));
   }
 
   tick(input: BanditTickInput, onTargetYard: boolean): { suppressMove: boolean } {
