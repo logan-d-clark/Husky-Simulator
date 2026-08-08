@@ -1,16 +1,10 @@
 import Phaser from 'phaser';
 import { PALETTE } from '../config/palette';
 import { DEFAULT_DIFFICULTY, DIFFICULTIES, type Difficulty } from '../config/difficulty';
+import { buildMenuLayout, DIFFICULTY_SEGMENT_HEIGHT } from '../ui/menuLayout';
 
 const hex = (c: string) => Phaser.Display.Color.HexStringToColor(c).color;
-
-// Give a text a dark outline + soft shadow so it stays legible over the bright
-// sky/grass backdrop (light cream/gold on light blue otherwise washes out).
-function legible<T extends Phaser.GameObjects.Text>(t: T, thickness = 4): T {
-  t.setStroke('#241f1b', thickness);
-  t.setShadow(0, 3, 'rgba(20,16,12,0.55)', 5, true, true);
-  return t;
-}
+const DISPLAY_FONT = '"Trebuchet MS", Arial, sans-serif';
 
 // Size a container and give it a hit area that matches its centered visuals. A
 // Container anchors its setSize input frame at the top-left of the size box
@@ -29,16 +23,18 @@ export class MenuScene extends Phaser.Scene {
     this.difficulty = DEFAULT_DIFFICULTY;
     this.devMode = false;
     const W = this.scale.width, H = this.scale.height, cx = W / 2;
+    const horizon = 360;
+    const layout = buildMenuLayout(horizon);
 
-    this.drawScene(W, H);
+    this.drawScene(W, H, horizon);
 
     // Title
-    legible(this.add.text(cx, 132, 'Husky Simulator', {
-      fontSize: '58px', color: '#ffffff', fontStyle: 'bold',
-    }).setOrigin(0.5), 6);
-    legible(this.add.text(cx, 192, 'Escape the yard. Gather treats. Beat the rival.', {
-      fontSize: '20px', color: '#f2ede0',
-    }).setOrigin(0.5));
+    this.add.text(cx, 132, 'Back Yard Bandits', {
+      fontFamily: DISPLAY_FONT, fontSize: '62px', color: '#263b4a', fontStyle: 'bold',
+    }).setOrigin(0.5).setShadow(0, 2, 'rgba(255,255,255,0.42)', 0, false, true);
+    this.add.text(cx, 192, 'Escape the yard. Gather treats. Rule the neighborhood.', {
+      fontFamily: DISPLAY_FONT, fontSize: '20px', color: '#38505b', fontStyle: 'bold',
+    }).setOrigin(0.5);
 
     // Flanking dogs facing the center — higher-fidelity menu-only portraits.
     // The husky reads bigger than the chihuahua, as in-game.
@@ -46,22 +42,22 @@ export class MenuScene extends Phaser.Scene {
     this.add.image(W - 210, 476, 'menu-chi').setScale(0.5).setOrigin(0.5);
 
     // Difficulty segmented control.
-    legible(this.add.text(cx, 300, 'DIFFICULTY', { fontSize: '15px', color: '#ffd27f', fontStyle: 'bold' }).setOrigin(0.5), 3);
-    this.buildDifficulty(cx, 340);
+    this.add.text(cx, layout.challengeHeadingY, 'CHOOSE YOUR CHALLENGE', {
+      fontFamily: DISPLAY_FONT, fontSize: '15px', color: '#5e492c', fontStyle: 'bold',
+    }).setOrigin(0.5).setLetterSpacing(2);
+    this.buildDifficulty(cx, layout.difficultyY);
 
     // Primary + secondary actions, stacked and centered.
-    this.button(cx, 430, 240, 56, 'Start', true, () =>
+    this.button(cx, layout.startY, 240, 56, 'Start', true, () =>
       this.scene.start('Game', { difficulty: this.difficulty, devMode: this.devMode }));
-    this.button(cx, 502, 240, 46, 'How to Play', false, () => this.scene.start('Instructions'));
-    this.button(cx, 562, 240, 46, 'Credits', false, () => this.scene.start('Instructions'));
+    this.button(cx, layout.howToPlayY, 240, 46, 'How to Play', false, () => this.scene.start('Instructions'));
 
     // Dev mode lives out of the way in the bottom-left corner.
     this.buildDevToggle(96, H - 48);
   }
 
-  private drawScene(W: number, H: number) {
+  private drawScene(W: number, H: number, horizon: number) {
     const g = this.add.graphics();
-    const horizon = 360;
     // Sky gradient.
     g.fillGradientStyle(hex('#8fd4ec'), hex('#8fd4ec'), hex('#cdeef7'), hex('#cdeef7'), 1)
       .fillRect(0, 0, W, horizon);
@@ -80,7 +76,7 @@ export class MenuScene extends Phaser.Scene {
 
   private buildDifficulty(cx: number, y: number) {
     const levels = Object.keys(DIFFICULTIES) as Difficulty[];
-    const segW = 150, segH = 46, gap = 10, totalW = levels.length * segW + (levels.length - 1) * gap;
+    const segW = 150, segH = DIFFICULTY_SEGMENT_HEIGHT, gap = 10, totalW = levels.length * segW + (levels.length - 1) * gap;
     const startX = cx - totalW / 2 + segW / 2;
     const segs: { key: Difficulty; g: Phaser.GameObjects.Graphics; name: Phaser.GameObjects.Text; sub: Phaser.GameObjects.Text }[] = [];
     const refresh = () => {
