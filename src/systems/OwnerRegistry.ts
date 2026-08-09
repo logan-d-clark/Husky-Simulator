@@ -44,7 +44,7 @@ export function buildRelieveTargets(map: GameMap, reg: OwnerRegistry, inv: Inven
   for (const row of map.tiles) {
     for (const t of row) {
       if (t.type !== 'grass' || t.ownerId === 0 || !canFoulTile(inv, t)) continue;
-      targets.push({ tile: { col: t.col, row: t.row }, affection: reg.get(t.ownerId).affection });
+      targets.push({ tile: { col: t.col, row: t.row }, ownerId: t.ownerId, affection: reg.get(t.ownerId).affection });
     }
   }
   return targets;

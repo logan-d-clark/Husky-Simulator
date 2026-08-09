@@ -56,20 +56,10 @@ export function bestFoodAnywhere(from: TileCoord, foods: Food[]): Food | null {
   return bestFood(from, foods, false);
 }
 
+// Bandit's water is low enough to send him to the nearest water and hold him
+// there until he's topped right back up to WATER_CAP.
 export function isThirsty(inv: Inventory): boolean {
-  return inv.water < config.WATER_CAP * 0.3;
-}
-
-// Nearest food within `radius` tiles (inclusive) of `from`, or null. Lets a
-// thirsty Bandit snap up an easy treat on his way to water instead of beelining.
-export function nearestFoodWithin(from: TileCoord, foods: Food[], radius: number): Food | null {
-  let best: Food | null = null;
-  let bestD = Infinity;
-  for (const f of foods) {
-    const d = manhattan(from, f.tile);
-    if (d <= radius && d < bestD) { bestD = d; best = f; }
-  }
-  return best;
+  return inv.water <= config.WATER_CAP * config.BANDIT_THIRST_FRACTION;
 }
 
 function isWaterAdjacent(grid: Grid, t: TileCoord): boolean {
@@ -137,9 +127,23 @@ export function patrolStep(grid: Grid, from: TileCoord, facing: Direction, rng: 
 export type BanditMode = 'chase' | 'patrol';
 export interface BanditMove { dir: Direction; mode: BanditMode; }
 
-// A family yard Bandit can foul to relieve himself, tagged with its owner's
-// current affection so he can preferentially foul the most-liked yard.
-export interface RelieveTarget { tile: TileCoord; affection: number; }
+// A family yard Bandit can foul to relieve himself, tagged with its owner (so a
+// relief episode can commit to one yard) and that owner's current affection (so
+// he picks the most-liked one to begin with).
+export interface RelieveTarget { tile: TileCoord; ownerId: number; affection: number; }
+
+// Bandit's three mutually-exclusive behaviour modes. He stays in whichever one
+// he entered until its exit condition fires — no mode preempts another, which is
+// what stops him dribbling waste across half the block.
+export type BanditGoal = 'treat' | 'relief' | 'water';
+
+// The HUD's label for a goal. Relief names the channel he's actually draining
+// (poop first when he's holding both), matching WorldActions' `> 1` drain floor.
+export function banditGoalLabel(goal: BanditGoal, inv: Inventory): string {
+  if (goal === 'water') return 'Needs Water!';
+  if (goal === 'relief') return inv.poop > 1 ? 'Need to Poop!' : 'Need to Pee!';
+  return 'Looking for Treats';
+}
 
 // Rank relieve targets so Bandit fouls the most-liked yard first: affection
 // descending, ties broken by nearest, then by original order (fully stable /
@@ -158,43 +162,58 @@ export function needsRelieve(inv: Inventory): boolean {
   return inv.poop >= config.BANDIT_RELIEVE_THRESHOLD || inv.pee >= config.BANDIT_RELIEVE_THRESHOLD;
 }
 
-// The relieve target Bandit heads for: the nearest available tile of the
-// highest-affection *reachable* yard (walk the affection-ranked list, take the
-// first with a path). Returns the tile (so the caller can see which yard) and
-// the first step toward it, or null when none is reachable. Pure.
+// The relieve target Bandit heads for, and the yard it belongs to.
+//
+// `committedOwnerId` is the yard he's already emptying on: his own fouling drops
+// that owner's affection, so re-ranking every tick would hand the "most-liked"
+// crown to a neighbour and walk him off with most of his load still held. While
+// committed he only considers that yard's tiles; the affection ranking is
+// consulted again solely when the yard has no reachable room left (it saturated),
+// which is how the episode hands off to the next-best yard. Pure.
 export function firstReachableRelieveTarget(
-  grid: Grid, from: TileCoord, relieveTargets: RelieveTarget[],
-): { tile: TileCoord; dir: Direction } | null {
-  for (const target of rankRelieveTargets(from, relieveTargets)) {
+  grid: Grid, from: TileCoord, relieveTargets: RelieveTarget[], committedOwnerId: number | null = null,
+): { tile: TileCoord; ownerId: number; dir: Direction | null } | null {
+  const stepTo = (target: RelieveTarget): { tile: TileCoord; ownerId: number; dir: Direction | null } | null => {
+    // The tile under his paws is a hit with no step to take. bfsFirstStep can
+    // never return it (its seed node carries no first direction), so without
+    // this case the last foulable tile of a committed yard reads as unreachable
+    // — and he'd abandon the yard, and the commitment, one tile early.
+    if (target.tile.col === from.col && target.tile.row === from.row) {
+      return { tile: target.tile, ownerId: target.ownerId, dir: null };
+    }
     const dir = bfsFirstStep(grid, from, (t) => t.col === target.tile.col && t.row === target.tile.row);
-    if (dir) return { tile: target.tile, dir };
+    return dir ? { tile: target.tile, ownerId: target.ownerId, dir } : null;
+  };
+  if (committedOwnerId !== null) {
+    for (const target of rankRelieveTargets(from, relieveTargets.filter((t) => t.ownerId === committedOwnerId))) {
+      const hit = stepTo(target);
+      if (hit) return hit;
+    }
+  }
+  for (const target of rankRelieveTargets(from, relieveTargets)) {
+    const hit = stepTo(target);
+    if (hit) return hit;
   }
   return null;
 }
 
-// Bandit's next move, in priority order: foul the most-liked reachable yard when
-// his need is high (foil to camping), else seek water when thirsty — grabbing an
-// easy treat en route — else head for the best food (smell-gated in advanced mode,
-// anywhere in omniscient mode), else wander the streets (half-speed patrol). All
-// goal-directed moves are full-speed chases. Reads the live omniscient flag so a
-// dev-panel toggle takes effect on the next move.
+// Bandit's next move for the goal he's currently in (BanditController owns the
+// mode; this just routes). `relief` walks to his committed yard's nearest
+// foulable tile, `water` beelines to the nearest water with no treat detour, and
+// `treat` heads for the best food — smell-gated in advanced mode, anywhere in
+// omniscient mode (read live, so a dev-panel toggle lands on the next move) —
+// falling back to the half-speed street patrol. Each goal falls through to the
+// treat chain when its own target is unreachable, so he never stands still.
+// All goal-directed moves are full-speed chases.
 export function nextBanditMove(
   grid: Grid, bandit: Bandit, foods: Food[], rng: () => number,
-  relieveTargets: RelieveTarget[] = [], emptying = false,
+  goal: BanditGoal = 'treat', relieveTargets: RelieveTarget[] = [], committedOwnerId: number | null = null,
 ): BanditMove | null {
-  // Foil first: head for the most-liked reachable yard when his need is high OR
-  // he's mid-empty-out (so he keeps finishing on more tiles below the threshold).
-  if (needsRelieve(bandit.inv) || emptying) {
-    const target = firstReachableRelieveTarget(grid, bandit.tile, relieveTargets);
-    if (target) return { dir: target.dir, mode: 'chase' };
+  if (goal === 'relief') {
+    const target = firstReachableRelieveTarget(grid, bandit.tile, relieveTargets, committedOwnerId);
+    if (target) return target.dir ? { dir: target.dir, mode: 'chase' } : null; // null dir: already on it, stay
   }
-  if (isThirsty(bandit.inv)) {
-    // Grab an easy treat en route to the water before beelining for it.
-    const grab = nearestFoodWithin(bandit.tile, foods, config.BANDIT_GRAB_RADIUS);
-    if (grab) {
-      const toGrab = bfsFirstStep(grid, bandit.tile, (t) => t.col === grab.tile.col && t.row === grab.tile.row);
-      if (toGrab) return { dir: toGrab, mode: 'chase' };
-    }
+  if (goal === 'water') {
     const toWater = bfsFirstStep(grid, bandit.tile, (t) => isWaterAdjacent(grid, t));
     if (toWater) return { dir: toWater, mode: 'chase' };
   }

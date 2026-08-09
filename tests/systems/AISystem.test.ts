@@ -3,7 +3,8 @@ import { parseMap } from '../../src/world/MapParser';
 import { Grid } from '../../src/world/Grid';
 import {
   nextBanditMove, bestSmelledFood, bestFoodAnywhere, smellRadius, isThirsty,
-  patrolStep, banditTweenDuration, nearestFoodWithin, rankRelieveTargets, canFoulTile,
+  patrolStep, banditTweenDuration, rankRelieveTargets, canFoulTile,
+  banditGoalLabel, firstReachableRelieveTarget,
   type Bandit, type RelieveTarget,
 } from '../../src/systems/AISystem';
 import { emptyFences, type Tile } from '../../src/world/tiles';
@@ -61,13 +62,6 @@ describe('bestFoodAnywhere', () => {
   });
 });
 
-describe('isThirsty', () => {
-  it('is true below 30% of water cap', () => {
-    expect(isThirsty({ food: 50, water: config.WATER_CAP * 0.2, poop: 0, pee: 0 })).toBe(true);
-    expect(isThirsty({ food: 50, water: config.WATER_CAP * 0.9, poop: 0, pee: 0 })).toBe(false);
-  });
-});
-
 describe('patrolStep (street-biased)', () => {
   const rng = (v: number) => () => v;
 
@@ -113,40 +107,34 @@ describe('nextBanditMove', () => {
     expect(['left', 'right']).toContain(move?.dir);
   });
 
-  it('chases water at full speed when thirsty', () => {
+  it('chases water at full speed in water mode', () => {
     const waterGrid = new Grid(parseMap('P0,P0,W0'));
-    const thirsty = bandit(0, { inv: { food: 50, water: config.WATER_CAP * 0.1, poop: 0, pee: 0 } });
-    expect(nextBanditMove(waterGrid, thirsty, [], rng)).toEqual({ dir: 'right', mode: 'chase' });
+    expect(nextBanditMove(waterGrid, bandit(0), [], rng, 'water')).toEqual({ dir: 'right', mode: 'chase' });
   });
 
-  describe('opportunistic treat grab while thirsty', () => {
+  describe('water mode beelines — no opportunistic treat grab', () => {
     // Row0 is grass (treats), row1 is a pavement corridor ending in water at (4,1).
-    // A thirsty bandit at (0,1) beelines RIGHT to water; a grabbable treat above
-    // him at (0,0) pulls him UP first — so the two behaviours differ in direction.
+    // A treat sits directly above him at (0,0); the water is four tiles RIGHT. He
+    // must ignore the adjacent treat entirely and take the shortest path to water.
     const wgrid = new Grid(parseMap(['G0,G0,G0,G0,G0', 'P0,P0,P0,P0,W0'].join('\n')));
-    const thirsty = (): Bandit =>
-      ({ tile: { col: 0, row: 1 }, inv: { food: 50, water: config.WATER_CAP * 0.1, poop: 0, pee: 0 }, facing: 'right' });
+    const at = (): Bandit =>
+      ({ tile: { col: 0, row: 1 }, inv: { food: 50, water: 5, poop: 0, pee: 0 }, facing: 'right' });
 
-    it('diverts UP to a treat within the grab radius instead of beelining to water', () => {
-      const foods: Food[] = [{ type: 'treat', value: 10, tile: { col: 0, row: 0 } }]; // dist 1 <= radius
-      expect(nextBanditMove(wgrid, thirsty(), foods, rng)).toEqual({ dir: 'up', mode: 'chase' });
+    it('walks past a treat one tile away and heads RIGHT to water', () => {
+      const foods: Food[] = [{ type: 'treat', value: 10, tile: { col: 0, row: 0 } }];
+      expect(nextBanditMove(wgrid, at(), foods, rng, 'water')).toEqual({ dir: 'right', mode: 'chase' });
     });
 
-    it('ignores a treat beyond the grab radius and heads RIGHT to water', () => {
-      const foods: Food[] = [{ type: 'treat', value: 10, tile: { col: 4, row: 0 } }]; // dist 5 > radius
-      expect(nextBanditMove(wgrid, thirsty(), foods, rng)).toEqual({ dir: 'right', mode: 'chase' });
+    it('ignores even a high-value bag adjacent to him', () => {
+      const foods: Food[] = [{ type: 'bag', value: 40, tile: { col: 0, row: 0 } }];
+      expect(nextBanditMove(wgrid, at(), foods, rng, 'water')).toEqual({ dir: 'right', mode: 'chase' });
     });
 
-    it('picks the nearer of two treats within the radius', () => {
-      const near: Food = { type: 'treat', value: 10, tile: { col: 1, row: 0 } };
-      const far: Food = { type: 'bag', value: 40, tile: { col: config.BANDIT_GRAB_RADIUS, row: 0 } };
-      expect(nearestFoodWithin({ col: 0, row: 0 }, [far, near], config.BANDIT_GRAB_RADIUS)).toBe(near);
-    });
-
-    it('nearestFoodWithin is inclusive at the radius and excludes beyond it', () => {
-      const at: Food = { type: 'treat', value: 10, tile: { col: 3, row: 0 } };
-      expect(nearestFoodWithin({ col: 0, row: 0 }, [at], 3)).toBe(at);
-      expect(nearestFoodWithin({ col: 0, row: 0 }, [at], 2)).toBeNull();
+    it('falls back to the treat chain when no water is reachable', () => {
+      const dry = new Grid(parseMap(['G0,G0', 'P0,P0'].join('\n')));
+      const foods: Food[] = [{ type: 'treat', value: 10, tile: { col: 0, row: 0 } }];
+      banditSettings.omniscient = true;
+      expect(nextBanditMove(dry, at(), foods, rng, 'water')).toEqual({ dir: 'up', mode: 'chase' });
     });
   });
 
@@ -178,41 +166,76 @@ describe('nextBanditMove', () => {
 describe('relieve targeting', () => {
   const rng = () => 0;
   const line = new Grid(parseMap('P0,P0,P0,P0,P0')); // 5 open pavement tiles
-  const highPoop = (col: number): Bandit =>
-    ({ tile: { col, row: 0 }, inv: { food: 50, water: 50, poop: config.BANDIT_RELIEVE_THRESHOLD, pee: 0 }, facing: 'right' });
-  const target = (col: number, affection: number): RelieveTarget => ({ tile: { col, row: 0 }, affection });
+  const bandit = (col: number): Bandit =>
+    ({ tile: { col, row: 0 }, inv: { food: 50, water: 50, poop: config.POOP_MAX, pee: 0 }, facing: 'right' });
+  // One owner per column by default, so a committed-yard filter is unambiguous.
+  const target = (col: number, affection: number, ownerId = col + 1): RelieveTarget =>
+    ({ tile: { col, row: 0 }, ownerId, affection });
 
-  it('heads toward a reachable yard when poop is high', () => {
-    expect(nextBanditMove(line, highPoop(2), [], rng, [target(0, 50)])).toEqual({ dir: 'left', mode: 'chase' });
-  });
-
-  it('is triggered by a high pee need alone', () => {
-    const b: Bandit = { tile: { col: 2, row: 0 }, inv: { food: 50, water: 50, poop: 0, pee: config.BANDIT_RELIEVE_THRESHOLD }, facing: 'right' };
-    expect(nextBanditMove(line, b, [], rng, [target(4, 50)])).toEqual({ dir: 'right', mode: 'chase' });
+  it('heads toward a reachable yard in relief mode', () => {
+    expect(nextBanditMove(line, bandit(2), [], rng, 'relief', [target(0, 50)])).toEqual({ dir: 'left', mode: 'chase' });
   });
 
   it('picks the highest-affection yard', () => {
-    expect(nextBanditMove(line, highPoop(2), [], rng, [target(0, 20), target(4, 80)])?.dir).toBe('right');
+    expect(nextBanditMove(line, bandit(2), [], rng, 'relief', [target(0, 20), target(4, 80)])?.dir).toBe('right');
   });
 
   it('breaks an affection tie by nearest', () => {
-    expect(nextBanditMove(line, highPoop(2), [], rng, [target(1, 50), target(4, 50)])?.dir).toBe('left');
+    expect(nextBanditMove(line, bandit(2), [], rng, 'relief', [target(1, 50), target(4, 50)])?.dir).toBe('left');
   });
 
   it('skips an unreachable top yard for the next-best reachable one', () => {
     const grid = new Grid(parseMap('P0,P0,H0')); // col 2 is a house — unreachable
-    // top-affection target is the house (unreachable); the reachable col-1 yard wins.
-    expect(nextBanditMove(grid, highPoop(0), [], rng, [target(2, 90), target(1, 50)])).toEqual({ dir: 'right', mode: 'chase' });
+    expect(nextBanditMove(grid, bandit(0), [], rng, 'relief', [target(2, 90), target(1, 50)])).toEqual({ dir: 'right', mode: 'chase' });
   });
 
-  it('falls through to normal behaviour when no yard is reachable', () => {
+  it('falls through to the treat chain when no yard is reachable', () => {
     const grid = new Grid(parseMap('P0,P0,H0'));
-    expect(nextBanditMove(grid, highPoop(0), [], rng, [target(2, 90)])?.mode).toBe('patrol');
+    expect(nextBanditMove(grid, bandit(0), [], rng, 'relief', [target(2, 90)])?.mode).toBe('patrol');
   });
 
-  it('does not relieve when the need is low', () => {
-    const lowNeed: Bandit = { tile: { col: 2, row: 0 }, inv: { food: 50, water: 50, poop: 0, pee: 0 }, facing: 'right' };
-    expect(nextBanditMove(line, lowNeed, [], rng, [target(0, 80)])?.mode).toBe('patrol');
+  it('does not pursue a yard outside relief mode, however full he is', () => {
+    expect(nextBanditMove(line, bandit(2), [], rng, 'treat', [target(0, 80)])?.mode).toBe('patrol');
+  });
+
+  // The reported bug: his own fouling drops the yard's affection, so a fresh
+  // per-tick ranking hands the crown to a neighbour and walks him off half-full.
+  describe('yard commitment', () => {
+    const COMMITTED = 1;
+    it('stays on the committed yard even when a rival now out-ranks it', () => {
+      const targets = [target(0, 10, COMMITTED), target(4, 90, 2)]; // committed yard is now the LEAST liked
+      expect(nextBanditMove(line, bandit(2), [], rng, 'relief', targets, COMMITTED)?.dir).toBe('left');
+      // ...and without the commitment he would indeed have gone the other way.
+      expect(nextBanditMove(line, bandit(2), [], rng, 'relief', targets, null)?.dir).toBe('right');
+    });
+
+    it('spreads across the committed yard, nearest tile first', () => {
+      const targets = [target(0, 10, COMMITTED), target(3, 10, COMMITTED), target(4, 90, 2)];
+      expect(nextBanditMove(line, bandit(2), [], rng, 'relief', targets, COMMITTED)?.dir).toBe('right'); // col 3, dist 1
+    });
+
+    it('hands off to the next-best yard once the committed one has no room left', () => {
+      // No targets remain for the committed owner — its lawn saturated.
+      const targets = [target(0, 20, 2), target(4, 90, 3)];
+      expect(nextBanditMove(line, bandit(2), [], rng, 'relief', targets, COMMITTED)?.dir).toBe('right');
+    });
+
+    it('keeps the commitment when the last foulable tile is the one under his paws', () => {
+      // Regression: bfsFirstStep can never return its own start tile, so the
+      // self-tile used to read as unreachable — dropping him through to the
+      // global ranking, re-committing him to a rival yard, and walking him off
+      // a tile he could still foul. He must stay put on his own yard instead.
+      const here = { col: 2, row: 0 };
+      const targets = [{ tile: here, ownerId: COMMITTED, affection: 10 }, target(4, 90, 2)];
+      const hit = firstReachableRelieveTarget(line, here, targets, COMMITTED);
+      expect(hit).toEqual({ tile: here, ownerId: COMMITTED, dir: null });
+      expect(nextBanditMove(line, bandit(2), [], rng, 'relief', targets, COMMITTED)).toBeNull(); // stays to foul
+    });
+
+    it('firstReachableRelieveTarget reports the yard it settled on', () => {
+      const hit = firstReachableRelieveTarget(line, { col: 2, row: 0 }, [target(0, 20, 7), target(4, 90, 9)]);
+      expect(hit).toEqual({ tile: { col: 4, row: 0 }, ownerId: 9, dir: 'right' });
+    });
   });
 
   describe('rankRelieveTargets', () => {
@@ -226,7 +249,7 @@ describe('relieve targeting', () => {
       expect(ranked.map((t) => t.tile.col)).toEqual([1, 3]);
     });
     it('resolves a full affection+distance tie by stable original order', () => {
-      const a = target(1, 50); const b = { tile: { col: 1, row: 2 }, affection: 50 }; // same dist from (0,0)
+      const a = target(1, 50); const b = { tile: { col: 1, row: 2 }, ownerId: 9, affection: 50 }; // same dist from (0,0)
       expect(rankRelieveTargets(from, [a, b])).toEqual([a, b]);
     });
   });
@@ -258,20 +281,37 @@ describe('canFoulTile', () => {
   });
 });
 
-describe('nextBanditMove — empty-out gate', () => {
-  const line = new Grid(parseMap('P0,P0,P0,P0,P0'));
-  const target = (col: number, affection: number): RelieveTarget => ({ tile: { col, row: 0 }, affection });
-  const at = (col: number, inv: Partial<Bandit['inv']>): Bandit =>
-    ({ tile: { col, row: 0 }, inv: { food: 50, water: 50, poop: 0, pee: 0, ...inv }, facing: 'right' });
-
-  it('heads to a relieve target while emptying even below the threshold', () => {
-    // pee 20 < BANDIT_RELIEVE_THRESHOLD(30): only pursued because emptying is true.
-    const move = nextBanditMove(line, at(2, { pee: 20 }), [], () => 0, [target(0, 50)], true);
-    expect(move).toEqual({ dir: 'left', mode: 'chase' });
+describe('isThirsty', () => {
+  const at = (water: number) => ({ food: 50, water, poop: 0, pee: 0 });
+  it('is true at or below the thirst fraction of WATER_CAP', () => {
+    const edge = config.WATER_CAP * config.BANDIT_THIRST_FRACTION;
+    expect(isThirsty(at(edge))).toBe(true);
+    expect(isThirsty(at(edge - 0.01))).toBe(true);
   });
-  it('does not pursue a relieve target at a sub-threshold need when not emptying', () => {
-    const move = nextBanditMove(line, at(2, { pee: 20 }), [], () => 0, [target(0, 50)], false);
-    expect(move?.mode).toBe('patrol');
+  it('is false just above it', () => {
+    expect(isThirsty(at(config.WATER_CAP * config.BANDIT_THIRST_FRACTION + 0.01))).toBe(false);
+  });
+  it('is false at 20% — the old 30% trigger no longer fires', () => {
+    expect(isThirsty(at(config.WATER_CAP * 0.2))).toBe(false);
+  });
+});
+
+describe('banditGoalLabel', () => {
+  const inv = (poop: number, pee: number) => ({ food: 50, water: 50, poop, pee });
+  it('names treat seeking', () => {
+    expect(banditGoalLabel('treat', inv(0, 0))).toBe('Looking for Treats');
+  });
+  it('names thirst', () => {
+    expect(banditGoalLabel('water', inv(0, 0))).toBe('Needs Water!');
+  });
+  it('names the poop he is draining', () => {
+    expect(banditGoalLabel('relief', inv(config.POOP_MAX, 0))).toBe('Need to Poop!');
+  });
+  it('names pee when he holds no drainable poop', () => {
+    expect(banditGoalLabel('relief', inv(1, config.PEE_MAX))).toBe('Need to Pee!');
+  });
+  it('names poop first when he is holding both', () => {
+    expect(banditGoalLabel('relief', inv(config.POOP_MAX, config.PEE_MAX))).toBe('Need to Poop!');
   });
 });
 

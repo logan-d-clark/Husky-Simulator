@@ -15,28 +15,232 @@ const owner = (affection: number): Owner =>
 const tile = (type: Tile['type']): Tile =>
   ({ col: 0, row: 0, type, ownerId: 1, fences: emptyFences(), heat: 0, dirt: 0, destruction: 0, foodPresent: false });
 
-// Most tests exercise Bandit standing on the yard he's targeting.
-const ON_TARGET = true, OFF_TARGET = false;
+// Most tests exercise Bandit standing on the yard he's committed to. `tick`
+// takes these as thunks (it resolves the yard only after the mode transition);
+// `shouldHold` takes the resolved boolean.
+const ON_TARGET = () => true, OFF_TARGET = () => false;
+const ON = true, OFF = false;
+const FULL = config.BANDIT_RELIEVE_THRESHOLD;   // 100% of a channel — his relief trigger
+const THIRSTY = config.WATER_CAP * config.BANDIT_THIRST_FRACTION;
 
-describe('BanditController — water refill', () => {
+// Run ticks until he stops suppressing movement (or the guard trips), so tests
+// can assert on the end state of a whole committed episode. Returns the total
+// ticks run, INCLUDING the one that released him.
+const runEpisode = (c: BanditController, input: () => Parameters<BanditController['tick']>[0], onTarget: () => boolean): number => {
+  let ticks = 0;
+  for (;;) {
+    ticks++;
+    if (!c.tick(input(), onTarget).suppressMove) return ticks;
+    if (ticks > 1000) throw new Error('episode did not terminate');
+  }
+};
+
+describe('BanditController — mode transitions', () => {
+  it('starts in treat seeking', () => {
+    expect(new BanditController().currentGoal()).toBe('treat');
+  });
+
+  it('stays in treat seeking below both triggers', () => {
+    const c = new BanditController();
+    c.tick({ inv: inv({ poop: FULL - 1, pee: FULL - 1, water: THIRSTY + 1 }), tile: tile('grass'), owner: owner(80), waterAdjacent: true }, ON_TARGET);
+    expect(c.currentGoal()).toBe('treat');
+  });
+
+  it('enters relief at a full poop channel', () => {
+    const c = new BanditController();
+    c.tick({ inv: inv({ poop: FULL }), tile: tile('pavement'), owner: owner(80), waterAdjacent: false }, OFF_TARGET);
+    expect(c.currentGoal()).toBe('relief');
+  });
+
+  it('enters relief at a full pee channel alone', () => {
+    const c = new BanditController();
+    c.tick({ inv: inv({ pee: FULL }), tile: tile('pavement'), owner: owner(80), waterAdjacent: false }, OFF_TARGET);
+    expect(c.currentGoal()).toBe('relief');
+  });
+
+  it('enters water mode at the thirst threshold', () => {
+    const c = new BanditController();
+    c.tick({ inv: inv({ water: THIRSTY }), tile: tile('pavement'), owner: owner(80), waterAdjacent: false }, OFF_TARGET);
+    expect(c.currentGoal()).toBe('water');
+  });
+
+  it('relief outranks water when both trigger on the same tick', () => {
+    const c = new BanditController();
+    c.tick({ inv: inv({ poop: FULL, water: 1 }), tile: tile('pavement'), owner: owner(80), waterAdjacent: false }, OFF_TARGET);
+    expect(c.currentGoal()).toBe('relief');
+  });
+
+  it('does not interrupt a relief episode when thirst arrives mid-way', () => {
+    const c = new BanditController();
+    const i = inv({ poop: FULL });
+    c.tick({ inv: i, tile: tile('grass'), owner: owner(80), waterAdjacent: false }, ON_TARGET);
+    i.water = 1; // now desperately thirsty
+    const res = c.tick({ inv: i, tile: tile('grass'), owner: owner(80), waterAdjacent: true }, ON_TARGET);
+    expect(c.currentGoal()).toBe('relief');
+    expect(res.suppressMove).toBe(true);
+    expect(i.water).toBe(1); // did NOT drink
+  });
+
+  it('does not interrupt a refill when a full channel arrives mid-drink', () => {
+    const c = new BanditController();
+    const i = inv({ water: THIRSTY });
+    c.tick({ inv: i, tile: tile('grass'), owner: owner(80), waterAdjacent: true }, ON_TARGET);
+    i.poop = FULL;
+    const res = c.tick({ inv: i, tile: tile('grass'), owner: owner(80), waterAdjacent: true }, ON_TARGET);
+    expect(c.currentGoal()).toBe('water');
+    expect(res.suppressMove).toBe(true);
+    expect(i.poop).toBe(FULL); // NOT drained — still drinking
+  });
+});
+
+describe('BanditController — relief mode', () => {
+  it('empties a full poop channel completely, then returns to treat seeking', () => {
+    const c = new BanditController();
+    const i = inv({ poop: FULL, pee: 0 });
+    const t = tile('grass');
+    runEpisode(c, () => ({ inv: i, tile: t, owner: owner(80), waterAdjacent: false }), ON_TARGET);
+    expect(i.poop).toBe(1);         // WorldActions' drain floor: fully spent
+    expect(c.currentGoal()).toBe('treat');
+    expect(c.committedYard()).toBeNull();
+  });
+
+  it('empties BOTH channels in one trip when both are full', () => {
+    const c = new BanditController();
+    const i = inv({ poop: FULL, pee: FULL });
+    const t = tile('grass');
+    runEpisode(c, () => ({ inv: i, tile: t, owner: owner(500), waterAdjacent: false }), ON_TARGET);
+    expect(i.poop).toBe(1);
+    expect(i.pee).toBe(1);
+    expect(c.currentGoal()).toBe('treat');
+  });
+
+  it('stays in relief far below the trigger until fully spent', () => {
+    const c = new BanditController();
+    const i = inv({ poop: FULL });
+    c.tick({ inv: i, tile: tile('grass'), owner: owner(80), waterAdjacent: false }, ON_TARGET);
+    i.poop = 5; // way below the trigger, but not empty
+    c.tick({ inv: i, tile: tile('pavement'), owner: owner(80), waterAdjacent: false }, OFF_TARGET);
+    expect(c.currentGoal()).toBe('relief');
+  });
+
+  it('holds its yard commitment for the whole episode', () => {
+    const c = new BanditController();
+    const i = inv({ poop: FULL });
+    c.tick({ inv: i, tile: tile('grass'), owner: owner(80), waterAdjacent: false }, ON_TARGET);
+    c.commitYard(7);
+    c.commitYard(9); // the AI may re-report the same yard each tick; last write wins
+    expect(c.committedYard()).toBe(9);
+  });
+
+  it('resumes draining on the new yard after a mid-episode hand-off', () => {
+    // The committed yard saturates, the AI re-commits him to another owner, and
+    // the episode must carry on there rather than ending half-full.
+    const c = new BanditController();
+    const i = inv({ poop: FULL, pee: 0 });
+    const yardA: Tile = { ...tile('grass'), ownerId: 4 };
+    const ownerA = owner(80);
+    c.tick({ inv: i, tile: yardA, owner: ownerA, waterAdjacent: false }, ON_TARGET);
+    c.commitYard(4);
+    expect(i.poop).toBe(FULL - config.POOP_RATE);
+
+    // Yard A is now saturated; he walks off it, still in relief, still full.
+    const saturated: Tile = { ...yardA, dirt: config.POOP_MAX };
+    expect(c.tick({ inv: i, tile: saturated, owner: ownerA, waterAdjacent: false }, ON_TARGET).suppressMove).toBe(false);
+    expect(c.currentGoal()).toBe('relief');
+
+    // The AI hands him to yard B; he drains there and finishes the episode on it.
+    c.commitYard(5);
+    const yardB: Tile = { ...tile('grass'), ownerId: 5 };
+    const ownerB = owner(90);
+    runEpisode(c, () => ({ inv: i, tile: yardB, owner: ownerB, waterAdjacent: false }), ON_TARGET);
+    expect(i.poop).toBe(1);
+    expect(c.committedYard()).toBeNull();       // episode over, commitment cleared
+    expect(c.currentGoal()).toBe('treat');
+    expect(ownerB.affection).toBeLessThan(90);  // the new yard took the rest of it
+  });
+
+  it('drains the channel a tile can still take when the other is capacity-blocked', () => {
+    // Tile has poop room but no pee room. He must not stall holding both: poop
+    // drains here, then he releases to find a tile that can take the pee.
+    const c = new BanditController();
+    const i = inv({ poop: FULL, pee: FULL });
+    const t: Tile = { ...tile('grass'), destruction: config.PEE_MAX };
+    runEpisode(c, () => ({ inv: i, tile: t, owner: owner(500), waterAdjacent: false }), ON_TARGET);
+    expect(i.poop).toBe(1);                  // fully drained the channel it could
+    expect(i.pee).toBe(FULL);                // pee untouched — no room here
+    expect(c.currentGoal()).toBe('relief');  // episode continues; he travels on
+  });
+
+  it('ignores a yard commitment outside relief, so none leaks into the next episode', () => {
+    const c = new BanditController();
+    c.commitYard(7);
+    expect(c.committedYard()).toBeNull();
+  });
+
+  it('does not foul a foulable tile that is NOT his committed yard — he travels on', () => {
+    const c = new BanditController();
+    const i = inv({ poop: FULL });
+    const res = c.tick({ inv: i, tile: tile('grass'), owner: owner(80), waterAdjacent: false }, OFF_TARGET);
+    expect(res.suppressMove).toBe(false);      // released to travel
+    expect(i.poop).toBe(FULL);                 // did NOT foul here
+    expect(c.currentGoal()).toBe('relief');    // still committed
+  });
+
+  it('does not relieve on a non-grass tile', () => {
+    const c = new BanditController();
+    const i = inv({ poop: FULL, pee: FULL });
+    const res = c.tick({ inv: i, tile: tile('pavement'), owner: owner(80), waterAdjacent: false }, ON_TARGET);
+    expect(res.suppressMove).toBe(false);
+    expect(i.poop).toBe(FULL);
+  });
+
+  it('releases on a maxed tile without ending the episode (he walks to the next one)', () => {
+    const c = new BanditController();
+    const i = inv({ poop: FULL, pee: 0 });
+    expect(c.tick({ inv: i, tile: tile('grass'), owner: owner(80), waterAdjacent: false }, ON_TARGET).suppressMove).toBe(true);
+    expect(i.poop).toBe(FULL - config.POOP_RATE);
+    const maxed: Tile = { ...tile('grass'), dirt: config.POOP_MAX };
+    const res = c.tick({ inv: i, tile: maxed, owner: owner(80), waterAdjacent: false }, ON_TARGET);
+    expect(res.suppressMove).toBe(false);
+    expect(c.currentGoal()).toBe('relief');
+  });
+
+  it('drops poop and owner affection by the same amount as Blizzard would', () => {
+    const c = new BanditController();
+    const bOwner = owner(80);
+    const bInv = inv({ poop: FULL, pee: 0 });
+    c.tick({ inv: bInv, tile: tile('grass'), owner: bOwner, waterAdjacent: false }, ON_TARGET);
+    const zOwner = owner(80);
+    const zInv = inv({ poop: FULL, pee: 0 });
+    WorldActions.poop({ inv: zInv }, tile('grass'), zOwner);
+    expect(bInv.poop).toBe(zInv.poop);
+    expect(bOwner.affection).toBe(zOwner.affection);
+  });
+});
+
+describe('BanditController — water mode', () => {
   it('drinks to a full refill, suppressing movement until the cap', () => {
     const c = new BanditController();
-    const i = inv({ water: 10 });
-    let ticks = 0;
-    let res = c.tick({ inv: i, tile: tile('pavement'), owner: owner(80), waterAdjacent: true }, OFF_TARGET);
-    while (res.suppressMove) {
-      ticks++;
-      res = c.tick({ inv: i, tile: tile('pavement'), owner: owner(80), waterAdjacent: true }, OFF_TARGET);
-    }
+    const i = inv({ water: THIRSTY });
+    const ticks = runEpisode(c, () => ({ inv: i, tile: tile('pavement'), owner: owner(80), waterAdjacent: true }), OFF_TARGET);
     expect(i.water).toBe(config.WATER_CAP);
-    expect(ticks).toBeGreaterThan(1);
+    // Exactly the sips the gap requires — not merely "more than one".
+    expect(ticks).toBe(Math.ceil((config.WATER_CAP - THIRSTY) / config.WATER_VALUE));
+  });
+
+  it('returns to treat seeking once full', () => {
+    const c = new BanditController();
+    const i = inv({ water: THIRSTY });
+    runEpisode(c, () => ({ inv: i, tile: tile('pavement'), owner: owner(80), waterAdjacent: true }), OFF_TARGET);
+    c.tick({ inv: i, tile: tile('pavement'), owner: owner(80), waterAdjacent: true }, OFF_TARGET);
+    expect(c.currentGoal()).toBe('treat');
   });
 
   it('gains exactly WATER_VALUE on a drinking tick (same as Blizzard)', () => {
     const c = new BanditController();
-    const bInv = inv({ water: 10 }); // thirsty
+    const bInv = inv({ water: THIRSTY });
     c.tick({ inv: bInv, tile: tile('pavement'), owner: owner(80), waterAdjacent: true }, OFF_TARGET);
-    const zInv = inv({ water: 10 });
+    const zInv = inv({ water: THIRSTY });
     ResourceSystem.drink(zInv);
     expect(bInv.water).toBe(zInv.water);
   });
@@ -49,158 +253,79 @@ describe('BanditController — water refill', () => {
     expect(i.water).toBe(config.WATER_CAP);
   });
 
-  it('only drinks when thirsty — a heat nibble below the cap does not re-trigger a refill', () => {
+  it('a heat nibble below the cap does not re-trigger a refill', () => {
     const c = new BanditController();
-    const i = inv({ water: 10 });
-    while (c.tick({ inv: i, tile: tile('pavement'), owner: owner(80), waterAdjacent: true }, OFF_TARGET).suppressMove) { /* fill */ }
-    expect(i.water).toBe(config.WATER_CAP);
+    const i = inv({ water: THIRSTY });
+    runEpisode(c, () => ({ inv: i, tile: tile('pavement'), owner: owner(80), waterAdjacent: true }), OFF_TARGET);
     i.water = config.WATER_CAP - 0.05;
     const input = { inv: i, tile: tile('pavement'), owner: owner(80), waterAdjacent: true };
     expect(c.tick(input, OFF_TARGET).suppressMove).toBe(false);
-    expect(c.shouldHold(input, OFF_TARGET)).toBe(false);
+    expect(c.shouldHold(input, OFF)).toBe(false);
     expect(i.water).toBe(config.WATER_CAP - 0.05); // did not drink
   });
 
-  it('does not interrupt an in-progress refill when a relieve need arises', () => {
+  it('does not freeze away from water while thirsty — he travels', () => {
     const c = new BanditController();
-    const i = inv({ water: 10, poop: 0 }); // thirsty
-    c.tick({ inv: i, tile: tile('grass'), owner: owner(80), waterAdjacent: true }, ON_TARGET); // refill starts -> 20
-    i.poop = config.BANDIT_RELIEVE_THRESHOLD + 20; // need crosses threshold mid-refill
-    const res = c.tick({ inv: i, tile: tile('grass'), owner: owner(80), waterAdjacent: true }, ON_TARGET);
-    expect(res.suppressMove).toBe(true);
-    expect(i.poop).toBe(config.BANDIT_RELIEVE_THRESHOLD + 20); // NOT drained — still refilling
-    expect(i.water).toBe(30); // kept drinking (10 -> 20 -> 30)
+    const i = inv({ water: THIRSTY });
+    const input = { inv: i, tile: tile('pavement'), owner: owner(80), waterAdjacent: false };
+    expect(c.tick(input, OFF_TARGET).suppressMove).toBe(false);
+    expect(c.shouldHold(input, OFF)).toBe(false);
   });
 });
 
-describe('BanditController — relieving', () => {
-  it('poops and pees on the target yard until spent, dropping owner affection, then releases', () => {
+describe('BanditController — shouldHold (movement gate) mirrors tick', () => {
+  const relieving = (c: BanditController, i: Inventory) =>
+    c.tick({ inv: i, tile: tile('pavement'), owner: owner(50), waterAdjacent: false }, OFF_TARGET);
+
+  // The whole point of shouldHold is to answer tick's hold decision WITHOUT the
+  // side effects. If the two ever disagree he either freezes on the spot or
+  // glides away mid-action — both have shipped as bugs before. So every case
+  // asserts the pair agrees on identical input, never shouldHold alone.
+  const bothAgree = (c: BanditController, input: Parameters<BanditController['shouldHold']>[0], onTarget: boolean, expected: boolean) => {
+    expect(c.shouldHold(input, onTarget)).toBe(expected);
+    expect(c.tick(input, () => onTarget).suppressMove).toBe(expected);
+  };
+
+  it('holds on his committed yard while in relief', () => {
     const c = new BanditController();
-    const o = owner(80);
-    const i = inv({ poop: 32, pee: 31 });
-    let res = c.tick({ inv: i, tile: tile('grass'), owner: o, waterAdjacent: false }, ON_TARGET);
-    while (res.suppressMove) {
-      res = c.tick({ inv: i, tile: tile('grass'), owner: o, waterAdjacent: false }, ON_TARGET);
-    }
-    expect(i.poop).toBe(1);
-    expect(i.pee).toBe(1);
-    expect(o.affection).toBe(80 - 31 - 30);
+    const i = inv({ poop: FULL });
+    relieving(c, i);
+    bothAgree(c, { inv: i, tile: tile('grass'), owner: owner(50), waterAdjacent: false }, ON, true);
   });
 
-  it('does not interrupt an in-progress relieve when thirst arises', () => {
+  it('does not hold on a foulable yard that is not his committed one', () => {
     const c = new BanditController();
-    const i = inv({ water: 5, poop: config.BANDIT_RELIEVE_THRESHOLD }); // thirsty AND high need
-    const res = c.tick({ inv: i, tile: tile('grass'), owner: owner(80), waterAdjacent: true }, ON_TARGET);
-    expect(res.suppressMove).toBe(true);
-    expect(i.poop).toBe(config.BANDIT_RELIEVE_THRESHOLD - 1); // relieved
-    expect(i.water).toBe(5); // did NOT drink — relieve wasn't interrupted
+    const i = inv({ poop: FULL });
+    relieving(c, i);
+    bothAgree(c, { inv: i, tile: tile('grass'), owner: owner(50), waterAdjacent: false }, OFF, false);
   });
 
-  it('drops poop and owner affection by the same amount as Blizzard would', () => {
+  it('does not hold him at the water while in relief (no drink, no drain, no freeze)', () => {
     const c = new BanditController();
-    const bOwner = owner(80);
-    const bInv = inv({ poop: config.BANDIT_RELIEVE_THRESHOLD, pee: 0 });
-    c.tick({ inv: bInv, tile: tile('grass'), owner: bOwner, waterAdjacent: false }, ON_TARGET);
-    const zOwner = owner(80);
-    const zInv = inv({ poop: config.BANDIT_RELIEVE_THRESHOLD, pee: 0 });
-    WorldActions.poop({ inv: zInv }, tile('grass'), zOwner);
-    expect(bInv.poop).toBe(zInv.poop);
-    expect(bOwner.affection).toBe(zOwner.affection);
+    const i = inv({ poop: FULL, water: 5 });
+    relieving(c, i);
+    bothAgree(c, { inv: i, tile: tile('pavement'), owner: owner(50), waterAdjacent: true }, OFF, false);
+    expect(i.water).toBe(5);
   });
 
-  it('does not relieve on a non-grass tile', () => {
+  it('holds next to water while in water mode', () => {
     const c = new BanditController();
-    const i = inv({ poop: config.BANDIT_RELIEVE_THRESHOLD, pee: config.BANDIT_RELIEVE_THRESHOLD });
-    const res = c.tick({ inv: i, tile: tile('pavement'), owner: owner(80), waterAdjacent: false }, ON_TARGET);
-    expect(res.suppressMove).toBe(false);
-    expect(i.poop).toBe(config.BANDIT_RELIEVE_THRESHOLD); // untouched
+    const i = inv({ water: THIRSTY });
+    c.tick({ inv: i, tile: tile('pavement'), owner: owner(50), waterAdjacent: false }, OFF_TARGET);
+    bothAgree(c, { inv: i, tile: tile('pavement'), owner: owner(50), waterAdjacent: true }, OFF, true);
   });
 
-  it('does not foul a foulable tile that is NOT his target yard — he travels on', () => {
+  it('never holds in treat seeking', () => {
     const c = new BanditController();
-    const i = inv({ poop: config.BANDIT_RELIEVE_THRESHOLD });
-    // a perfectly foulable grass tile, but it's not the yard he's targeting
-    const res = c.tick({ inv: i, tile: tile('grass'), owner: owner(80), waterAdjacent: false }, OFF_TARGET);
-    expect(res.suppressMove).toBe(false);                      // release to travel to the target yard
-    expect(i.poop).toBe(config.BANDIT_RELIEVE_THRESHOLD);      // did NOT foul here
-    expect(c.isEmptying()).toBe(true);                         // still committed to emptying
-  });
-});
-
-describe('BanditController — shouldHold (movement gate)', () => {
-  it('holds on his target yard when the need is high', () => {
-    const c = new BanditController();
-    expect(c.shouldHold({ inv: inv({ poop: config.BANDIT_RELIEVE_THRESHOLD }), tile: tile('grass'), owner: owner(50), waterAdjacent: false }, ON_TARGET)).toBe(true);
-  });
-  it('does not hold on a foulable yard that is not his target', () => {
-    const c = new BanditController();
-    expect(c.shouldHold({ inv: inv({ poop: config.BANDIT_RELIEVE_THRESHOLD }), tile: tile('grass'), owner: owner(50), waterAdjacent: false }, OFF_TARGET)).toBe(false);
-  });
-  it('holds next to water while thirsty', () => {
-    const c = new BanditController();
-    expect(c.shouldHold({ inv: inv({ water: 10 }), tile: tile('pavement'), owner: owner(50), waterAdjacent: true }, OFF_TARGET)).toBe(true);
-  });
-  it('does not hold next to water when not thirsty (topped up)', () => {
-    const c = new BanditController();
-    expect(c.shouldHold({ inv: inv({ water: config.WATER_CAP - 0.05 }), tile: tile('pavement'), owner: owner(50), waterAdjacent: true }, OFF_TARGET)).toBe(false);
-  });
-  it('does not hold on pavement with a low need and full water', () => {
-    const c = new BanditController();
-    expect(c.shouldHold({ inv: inv({ water: config.WATER_CAP }), tile: tile('pavement'), owner: owner(50), waterAdjacent: true }, ON_TARGET)).toBe(false);
-  });
-  it('does not hold on his target yard once the need is spent', () => {
-    const c = new BanditController();
-    expect(c.shouldHold({ inv: inv({ poop: 0, pee: 0 }), tile: tile('grass'), owner: owner(50), waterAdjacent: false }, ON_TARGET)).toBe(false);
-  });
-});
-
-describe('BanditController — empty-out episode', () => {
-  it('turns on at the threshold and stays on below it until fully spent', () => {
-    const c = new BanditController();
-    const i = inv({ poop: 0, pee: config.BANDIT_RELIEVE_THRESHOLD });
-    c.tick({ inv: i, tile: tile('grass'), owner: owner(80), waterAdjacent: false }, ON_TARGET);
-    expect(c.isEmptying()).toBe(true);
-    // his remaining pee falls below the threshold (a tile filled) — still emptying, now travelling
-    i.pee = 20;
-    c.tick({ inv: i, tile: tile('pavement'), owner: owner(80), waterAdjacent: false }, OFF_TARGET);
-    expect(c.isEmptying()).toBe(true);
-    // fully spent → episode ends
-    i.poop = 1; i.pee = 1;
-    c.tick({ inv: i, tile: tile('grass'), owner: owner(80), waterAdjacent: false }, ON_TARGET);
-    expect(c.isEmptying()).toBe(false);
-  });
-
-  it('holds+fouls a foulable target tile, releases on a maxed one without ending the episode', () => {
-    const c = new BanditController();
-    const i = inv({ poop: config.BANDIT_RELIEVE_THRESHOLD, pee: 0 });
-    const r1 = c.tick({ inv: i, tile: tile('grass'), owner: owner(80), waterAdjacent: false }, ON_TARGET);
-    expect(r1.suppressMove).toBe(true);
-    expect(i.poop).toBe(config.BANDIT_RELIEVE_THRESHOLD - 1); // drained one
-    const maxed: Tile = { ...tile('grass'), dirt: config.POOP_MAX };
-    const r2 = c.tick({ inv: i, tile: maxed, owner: owner(80), waterAdjacent: false }, ON_TARGET);
-    expect(r2.suppressMove).toBe(false);   // release to walk to another tile
-    expect(c.isEmptying()).toBe(true);     // but still committed to emptying
-  });
-
-  it('does not freeze when emptying + thirsty at the water off his target yard', () => {
-    // Regression: tick's emptying branch preempts refill (drinks nothing while
-    // emptying); shouldHold must agree and NOT hold him for a refill, or he'd be
-    // pinned at the water's edge doing nothing forever.
-    const c = new BanditController();
-    const i = inv({ water: 5, poop: config.BANDIT_RELIEVE_THRESHOLD }); // thirsty AND high need
-    const input = { inv: i, tile: tile('pavement'), owner: owner(80), waterAdjacent: true };
-    const r = c.tick(input, OFF_TARGET); // sets emptying (needsRelieve); not on a foulable target tile
-    expect(c.isEmptying()).toBe(true);
-    expect(r.suppressMove).toBe(false);           // does not hold — no drink, no drain
-    expect(c.shouldHold(input, OFF_TARGET)).toBe(false); // shouldHold agrees → he moves on
-    expect(i.water).toBe(5);                       // did NOT drink (emptying preempts refill)
+    const input = { inv: inv({ water: config.WATER_CAP }), tile: tile('grass'), owner: owner(50), waterAdjacent: true };
+    bothAgree(c, input, ON, false);
   });
 
   it('does not trap him on a fully-maxed target tile (no progress possible)', () => {
     const c = new BanditController();
+    const i = inv({ poop: FULL, pee: FULL });
+    relieving(c, i);
     const maxed: Tile = { ...tile('grass'), dirt: config.POOP_MAX, destruction: config.PEE_MAX };
-    const input = { inv: inv({ poop: config.BANDIT_RELIEVE_THRESHOLD, pee: config.BANDIT_RELIEVE_THRESHOLD }), tile: maxed, owner: owner(80), waterAdjacent: false };
-    expect(c.shouldHold(input, ON_TARGET)).toBe(false);      // free to move on
-    expect(c.tick(input, ON_TARGET).suppressMove).toBe(false); // and tick agrees
+    bothAgree(c, { inv: i, tile: maxed, owner: owner(80), waterAdjacent: false }, ON, false);
   });
 });

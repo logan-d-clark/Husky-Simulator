@@ -27,6 +27,9 @@ const ROW = (i: number): number => ROW0 + i * ROW_PITCH; // 0=food 1=water 2=poo
 const BANDIT_CARD_X = 366, BANDIT_CARD_W = 312;
 const BANDIT_X = 378, BANDIT_BAR = 512, BANDIT_BAR_W = 158;
 const BANDIT_DIM = '#b7a482', BANDIT_BAR_ALPHA = 0.6;
+// His mode line sits a row below the four stats, brighter than them so the
+// player can read his intent at a glance. ROW(4)=146 clears the card's floor (168).
+const BANDIT_GOAL = '#e8c98a';
 
 export class UIScene extends Phaser.Scene {
   private g!: Phaser.GameObjects.Graphics;
@@ -75,6 +78,7 @@ export class UIScene extends Phaser.Scene {
     mk('bWater', BANDIT_X, y0 + ROW(1), '15px', 0, BANDIT_DIM);
     mk('bPoop', BANDIT_X, y0 + ROW(2), '15px', 0, BANDIT_DIM);
     mk('bPee', BANDIT_X, y0 + ROW(3), '15px', 0, BANDIT_DIM);
+    mk('bGoal', BANDIT_X, y0 + ROW(4), '14px', 0, BANDIT_GOAL); // which of his three modes he's in
     // right zone (Current Space) — sub-column A
     mk('owner', CS_A, y0 + 58, '15px');
     mk('tolL', CS_A, y0 + 88);
@@ -125,6 +129,7 @@ export class UIScene extends Phaser.Scene {
     this.texts.bWater.setText(`💧 Water ${n0(s.chiWater)}`);
     this.texts.bPoop.setText(`💩 Poop ${n0(s.chiPoop)}`);
     this.texts.bPee.setText(`🟡 Pee ${n0(s.chiPee)}`);
+    this.texts.bGoal.setText(s.chiGoalLabel);
 
     // Header
     const mm = Math.floor(s.secondsLeft / 60), ss = s.secondsLeft % 60;
