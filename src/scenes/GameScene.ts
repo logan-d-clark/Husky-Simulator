@@ -140,7 +140,7 @@ export class GameScene extends Phaser.Scene {
       secondsLeft: this.secondsLeft,
       huskyFood: this.husky.inv.food, chiFood: this.chihuahua.inv.food,
       chiWater: this.chihuahua.inv.water, chiPoop: this.chihuahua.inv.poop, chiPee: this.chihuahua.inv.pee,
-      chiGoalLabel: banditGoalLabel(this.banditController.currentGoal(), this.chihuahua.inv),
+      chiGoalLabel: banditGoalLabel(this.banditController.currentGoal(), this.banditController.activeChannel()),
       currentTile: { heat: t.heat, dirt: t.dirt, destruction: t.destruction, ownerId: t.ownerId },
     };
   }
@@ -218,7 +218,9 @@ export class GameScene extends Phaser.Scene {
   // stays on it even as his own fouling drops that owner's affection.
   private chiRelieveContext(): { relieveTargets: RelieveTarget[]; onTargetYard: boolean } {
     if (this.banditController.currentGoal() !== 'relief') return { relieveTargets: [], onTargetYard: false };
-    const relieveTargets = buildRelieveTargets(this.map, this.ownerRegistry, this.chihuahua.inv);
+    const relieveTargets = buildRelieveTargets(
+      this.map, this.ownerRegistry, this.chihuahua.inv, this.banditController.activeChannel(),
+    );
     const target = firstReachableRelieveTarget(
       this.grid, this.chihuahua.tile, relieveTargets, this.banditController.committedYard(),
     );

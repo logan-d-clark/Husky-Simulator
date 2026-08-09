@@ -33,6 +33,26 @@ describe('OwnerRegistry', () => {
     expect(buildRelieveTargets(map, reg, holding(1))).toHaveLength(0);  // holds nothing drainable
   });
 
+  it('narrows targets to the channel he is draining', () => {
+    // Tile 0 has maxed dirt but pee room; tile 1 is clean. A Bandit draining
+    // poop must see only tile 1 — walking to a tile that cannot take his
+    // current channel is how his targeting and his fouling start disagreeing.
+    const map = parseMap('G2,G2');
+    const reg = new OwnerRegistry();
+    map.tiles[0][0].dirt = 100; // POOP_MAX
+    const both = holding(40, 40);
+    expect(buildRelieveTargets(map, reg, both, 'poop')).toHaveLength(1);
+    expect(buildRelieveTargets(map, reg, both, 'pee')).toHaveLength(2);   // pee fits on both
+    expect(buildRelieveTargets(map, reg, both, null)).toHaveLength(2);    // either-channel default
+  });
+
+  it('yields nothing for a channel he is not carrying', () => {
+    const map = parseMap('G2,G2');
+    const reg = new OwnerRegistry();
+    expect(buildRelieveTargets(map, reg, holding(1, 40), 'poop')).toHaveLength(0);
+    expect(buildRelieveTargets(map, reg, holding(1, 40), 'pee')).toHaveLength(2);
+  });
+
   it('dispense emits food when roll succeeds', () => {
     const map = parseMap('G2'); // owner 2
     const reg = new OwnerRegistry();

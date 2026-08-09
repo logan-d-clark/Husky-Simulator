@@ -4,7 +4,7 @@ import { AffectionSystem } from './AffectionSystem';
 import { foodValue, type Food } from '../entities/Food';
 import type { GameMap } from '../world/MapParser';
 import type { TileCoord, Inventory } from '../types';
-import { canFoulTile, type RelieveTarget } from './AISystem';
+import { canFoulTile, type RelieveTarget, type WasteChannel } from './AISystem';
 
 export class OwnerRegistry {
   private byId = new Map<number, Owner>();
@@ -38,12 +38,15 @@ export function yardCentroid(map: GameMap, ownerId: number): TileCoord | null {
 // tile, tagged with its owner's current affection. He then heads for the nearest
 // available tile of the most-liked yard, spreading across the yard as tiles fill
 // and only moving on when a whole yard is full. The public/street owner (id 0)
-// is excluded — Bandit only fouls family yards.
-export function buildRelieveTargets(map: GameMap, reg: OwnerRegistry, inv: Inventory): RelieveTarget[] {
+// is excluded — Bandit only fouls family yards. `channel` narrows availability to
+// the one he's currently draining, so he never walks to a tile that can't take it.
+export function buildRelieveTargets(
+  map: GameMap, reg: OwnerRegistry, inv: Inventory, channel: WasteChannel | null = null,
+): RelieveTarget[] {
   const targets: RelieveTarget[] = [];
   for (const row of map.tiles) {
     for (const t of row) {
-      if (t.type !== 'grass' || t.ownerId === 0 || !canFoulTile(inv, t)) continue;
+      if (t.type !== 'grass' || t.ownerId === 0 || !canFoulTile(inv, t, channel)) continue;
       targets.push({ tile: { col: t.col, row: t.row }, ownerId: t.ownerId, affection: reg.get(t.ownerId).affection });
     }
   }
