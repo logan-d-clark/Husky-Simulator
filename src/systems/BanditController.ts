@@ -4,7 +4,7 @@ import type { Owner } from '../entities/Owner';
 import { config } from '../config/gameConfig';
 import { ResourceSystem } from './ResourceSystem';
 import { WorldActions } from './WorldActions';
-import { needsRelieve, isThirsty, canFoulTile, type BanditGoal } from './AISystem';
+import { needsRelieve, isThirsty, canFoulTile, type BanditGoal, type WasteChannel } from './AISystem';
 
 export interface BanditTickInput {
   inv: Inventory;
@@ -19,8 +19,8 @@ export interface BanditTickInput {
 // there is no "which latch wins" logic to get wrong.
 //
 //   treat  → default; the AI's food/patrol chain.
-//   relief → entered at a 100%-full channel; drains every full channel to empty
-//            on ONE committed yard, then back to treat.
+//   relief → entered at a 100%-full channel; drains the full channels to empty
+//            on ONE committed yard, ONE channel at a time, then back to treat.
 //   water  → entered at/below BANDIT_THIRST_FRACTION of WATER_CAP; drinks to
 //            WATER_CAP, then back to treat.
 //
@@ -35,10 +35,18 @@ export class BanditController {
   // owner's affection, so without a commitment he'd re-rank to a neighbour's
   // yard after a single drop and dribble across the block instead of emptying.
   private yardOwnerId: number | null = null;
+  // Channels still to drain this episode, in order. He works the head of the
+  // queue to empty before starting the next — one channel at a time, like
+  // Blizzard. Empty queue outside relief.
+  private drainQueue: WasteChannel[] = [];
 
   /** Bandit's current behaviour mode — GameScene reads this to route his
    *  movement and to label his HUD block. */
   currentGoal(): BanditGoal { return this.goal; }
+
+  /** The waste channel he is draining right now, or null when not relieving.
+   *  Drives both his tile targeting and his HUD label. */
+  activeChannel(): WasteChannel | null { return this.drainQueue[0] ?? null; }
 
   /** The yard this relief episode is committed to, or null when not in relief
    *  (or not yet arrived at one). */
@@ -50,32 +58,63 @@ export class BanditController {
     if (this.goal === 'relief') this.yardOwnerId = ownerId;
   }
 
-  // Both channels drained past WorldActions' `> 1` floor: the episode is done.
-  private isEmpty(inv: Inventory): boolean {
-    return inv.poop <= 1 && inv.pee <= 1;
+  // Channels currently at 100%, poop before pee. Only a FULL channel earns a
+  // trip: arriving with pee full and poop half-loaded drains the pee and leaves
+  // the poop for its own trip later.
+  private fullChannels(inv: Inventory): WasteChannel[] {
+    const full: WasteChannel[] = [];
+    if (inv.poop >= config.BANDIT_RELIEVE_THRESHOLD) full.push('poop');
+    if (inv.pee >= config.BANDIT_RELIEVE_THRESHOLD) full.push('pee');
+    return full;
   }
 
-  // Drain poop and pee once onto the current yard. A channel that is already
-  // empty (or a tile with no room on it) is a no-op via WorldActions' guards, so
-  // this correctly empties one channel or both.
-  private relieveOnce(input: BanditTickInput): void {
+  // Drained past WorldActions' `> 1` floor — nothing left on this channel.
+  private isDrained(inv: Inventory, channel: WasteChannel): boolean {
+    return inv[channel] <= 1;
+  }
+
+  // Drain ONE channel onto the current yard. Blizzard's `action` holds a single
+  // verb, so he can only poop or pee on a given tick; Bandit dropping both at
+  // once cleared two bars in the time Blizzard clears one. Same rate, same
+  // opportunity cost — while either dog stands here relieving, the other is out
+  // collecting food.
+  private drainActiveChannel(input: BanditTickInput): void {
     const actor = { inv: input.inv };
-    WorldActions.poop(actor, input.tile, input.owner);
-    WorldActions.pee(actor, input.tile, input.owner);
+    if (this.drainQueue[0] === 'poop') WorldActions.poop(actor, input.tile, input.owner);
+    else if (this.drainQueue[0] === 'pee') WorldActions.pee(actor, input.tile, input.owner);
+  }
+
+  // Retire a spent head channel and end the episode when nothing is left.
+  //
+  // Called both from `updateGoal` and immediately after a drain, so
+  // `activeChannel()` never names a channel that is already empty. That window
+  // matters: `buildRelieveTargets` filters tiles by the active channel, so a
+  // spent one matches NOTHING — every tile fails `canPoop`'s `> 1` — and any
+  // `shouldHold` in the rest of the frame would release him off the yard he is
+  // mid-episode on. Same reasoning as water mode leaving in the tick it fills.
+  //
+  // Recomputes from what's full NOW rather than just shifting, so a channel that
+  // filled mid-episode (heat pushes pee up while he stands here draining poop)
+  // is picked up instead of stranded.
+  private advanceQueue(inv: Inventory): void {
+    if (this.drainQueue.length > 0 && this.isDrained(inv, this.drainQueue[0])) {
+      this.drainQueue = this.fullChannels(inv).filter((c) => !this.isDrained(inv, c));
+    }
+    if (this.drainQueue.length === 0) {
+      this.goal = 'treat';
+      this.yardOwnerId = null;
+    }
   }
 
   // Mode transitions. Only `treat` picks a new mode, so nothing preempts an
   // episode in progress; relief outranks water when both trigger at once.
   private updateGoal(inv: Inventory): void {
     if (this.goal === 'treat') {
-      if (needsRelieve(inv)) this.goal = 'relief';
+      if (needsRelieve(inv)) { this.goal = 'relief'; this.drainQueue = this.fullChannels(inv); }
       else if (isThirsty(inv)) this.goal = 'water';
       return;
     }
-    if (this.goal === 'relief' && this.isEmpty(inv)) {
-      this.goal = 'treat';
-      this.yardOwnerId = null;
-    }
+    if (this.goal === 'relief') this.advanceQueue(inv);
     // Water mode's exit is owned by `tick`, which leaves the instant he hits the
     // cap rather than a tick later — see the comment there.
   }
@@ -85,7 +124,7 @@ export class BanditController {
   // the yard the AI is targeting, so he travels to the most-liked yard rather
   // than fouling whatever grass is under his feet.
   shouldHold(input: BanditTickInput, onTargetYard: boolean): boolean {
-    if (this.goal === 'relief') return onTargetYard && canFoulTile(input.inv, input.tile);
+    if (this.goal === 'relief') return onTargetYard && canFoulTile(input.inv, input.tile, this.activeChannel());
     if (this.goal === 'water') return input.waterAdjacent && input.inv.water < config.WATER_CAP;
     return false;
   }
@@ -103,9 +142,10 @@ export class BanditController {
     // can take it (hold + drain); otherwise release so he keeps travelling to
     // that yard's remaining tiles — or, once it saturates, to the next-best one.
     if (this.goal === 'relief') {
-      if (onTargetYard() && canFoulTile(input.inv, input.tile)) {
-        this.relieveOnce(input);
-        return { suppressMove: true };
+      if (onTargetYard() && canFoulTile(input.inv, input.tile, this.activeChannel())) {
+        this.drainActiveChannel(input);
+        this.advanceQueue(input.inv); // retire the channel in the SAME tick it empties
+        return { suppressMove: this.goal === 'relief' }; // last drop? released now, like water at the cap
       }
       return { suppressMove: false };
     }

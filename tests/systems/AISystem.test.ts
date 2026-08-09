@@ -279,6 +279,23 @@ describe('canFoulTile', () => {
     expect(canFoulTile(inv(40, 0), gtile({ dirt: config.POOP_MAX - config.POOP_RATE }))).toBe(true);
     expect(canFoulTile(inv(40, 0), gtile({ dirt: config.POOP_MAX }))).toBe(false);
   });
+
+  describe('narrowed to one channel', () => {
+    // A tile with pee room is no use to a Bandit draining poop onto maxed dirt.
+    const dirtMaxed = gtile({ dirt: config.POOP_MAX });
+    it('asks only about the named channel', () => {
+      expect(canFoulTile(inv(40, 40), dirtMaxed, 'poop')).toBe(false);
+      expect(canFoulTile(inv(40, 40), dirtMaxed, 'pee')).toBe(true);
+    });
+    it('still answers either-channel when none is named', () => {
+      expect(canFoulTile(inv(40, 40), dirtMaxed)).toBe(true);
+      expect(canFoulTile(inv(40, 40), dirtMaxed, null)).toBe(true);
+    });
+    it('needs held waste on that channel specifically', () => {
+      expect(canFoulTile(inv(1, 40), gtile(), 'poop')).toBe(false); // holds no poop
+      expect(canFoulTile(inv(1, 40), gtile(), 'pee')).toBe(true);
+    });
+  });
 });
 
 describe('isThirsty', () => {
@@ -297,21 +314,20 @@ describe('isThirsty', () => {
 });
 
 describe('banditGoalLabel', () => {
-  const inv = (poop: number, pee: number) => ({ food: 50, water: 50, poop, pee });
   it('names treat seeking', () => {
-    expect(banditGoalLabel('treat', inv(0, 0))).toBe('Looking for Treats');
+    expect(banditGoalLabel('treat', null)).toBe('Looking for Treats');
   });
   it('names thirst', () => {
-    expect(banditGoalLabel('water', inv(0, 0))).toBe('Needs Water!');
+    expect(banditGoalLabel('water', null)).toBe('Needs Water!');
   });
-  it('names the poop he is draining', () => {
-    expect(banditGoalLabel('relief', inv(config.POOP_MAX, 0))).toBe('Need to Poop!');
+  it('names the channel he is draining', () => {
+    expect(banditGoalLabel('relief', 'poop')).toBe('Need to Poop!');
+    expect(banditGoalLabel('relief', 'pee')).toBe('Need to Pee!');
   });
-  it('names pee when he holds no drainable poop', () => {
-    expect(banditGoalLabel('relief', inv(1, config.PEE_MAX))).toBe('Need to Pee!');
-  });
-  it('names poop first when he is holding both', () => {
-    expect(banditGoalLabel('relief', inv(config.POOP_MAX, config.PEE_MAX))).toBe('Need to Poop!');
+  it('ignores the mode when he is not relieving', () => {
+    // A leftover channel must never leak a waste label into another mode.
+    expect(banditGoalLabel('treat', 'pee')).toBe('Looking for Treats');
+    expect(banditGoalLabel('water', 'poop')).toBe('Needs Water!');
   });
 });
 

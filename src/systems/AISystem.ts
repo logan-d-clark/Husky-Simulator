@@ -6,10 +6,17 @@ import { config } from '../config/gameConfig';
 import { banditSettings } from '../config/banditMode';
 import { WorldActions } from './WorldActions';
 
+// The two waste channels. Like Blizzard, Bandit drains exactly one at a time.
+export type WasteChannel = 'poop' | 'pee';
+
 // A family-yard tile Bandit could still foul: grass with room for the waste he's
-// holding. Delegates to WorldActions' capacity guards (single source of truth) so
-// the AI's targeting and the controller's fouling can never disagree.
-export function canFoulTile(inv: Inventory, tile: Tile): boolean {
+// holding. Given a `channel` it asks only about that one — a tile with pee room
+// is no use to a Bandit draining poop onto maxed dirt. Delegates to WorldActions'
+// capacity guards (single source of truth) so the AI's targeting and the
+// controller's fouling can never disagree.
+export function canFoulTile(inv: Inventory, tile: Tile, channel: WasteChannel | null = null): boolean {
+  if (channel === 'poop') return WorldActions.canPoop({ inv }, tile);
+  if (channel === 'pee') return WorldActions.canPee({ inv }, tile);
   return WorldActions.canPoop({ inv }, tile) || WorldActions.canPee({ inv }, tile);
 }
 
@@ -137,11 +144,14 @@ export interface RelieveTarget { tile: TileCoord; ownerId: number; affection: nu
 // what stops him dribbling waste across half the block.
 export type BanditGoal = 'treat' | 'relief' | 'water';
 
-// The HUD's label for a goal. Relief names the channel he's actually draining
-// (poop first when he's holding both), matching WorldActions' `> 1` drain floor.
-export function banditGoalLabel(goal: BanditGoal, inv: Inventory): string {
+// The HUD's label for a goal. Relief names the channel he is actually draining,
+// taken from the episode's own state — NOT inferred from what he happens to be
+// carrying. The old inventory sniff (`inv.poop > 1 ? poop : pee`) answered "is he
+// holding drainable poop", so a pee-triggered trip read "Need to Poop!" whenever
+// he also carried poop.
+export function banditGoalLabel(goal: BanditGoal, channel: WasteChannel | null): string {
   if (goal === 'water') return 'Needs Water!';
-  if (goal === 'relief') return inv.poop > 1 ? 'Need to Poop!' : 'Need to Pee!';
+  if (goal === 'relief') return channel === 'pee' ? 'Need to Pee!' : 'Need to Poop!';
   return 'Looking for Treats';
 }
 

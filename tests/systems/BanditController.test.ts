@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { BanditController } from '../../src/systems/BanditController';
 import { ResourceSystem } from '../../src/systems/ResourceSystem';
 import { WorldActions } from '../../src/systems/WorldActions';
+import { banditGoalLabel } from '../../src/systems/AISystem';
 import { Owner } from '../../src/entities/Owner';
 import { emptyFences, type Tile } from '../../src/world/tiles';
 import { config, resetConfig } from '../../src/config/gameConfig';
@@ -112,6 +113,130 @@ describe('BanditController — relief mode', () => {
     expect(i.poop).toBe(1);
     expect(i.pee).toBe(1);
     expect(c.currentGoal()).toBe('treat');
+  });
+
+  it('drains only ONE channel per tick — never both', () => {
+    const c = new BanditController();
+    const i = inv({ poop: FULL, pee: FULL });
+    const t = tile('grass');
+    for (let n = 0; n < 20; n++) {
+      const before = { poop: i.poop, pee: i.pee };
+      c.tick({ inv: i, tile: t, owner: owner(500), waterAdjacent: false }, ON_TARGET);
+      const moved = [i.poop !== before.poop, i.pee !== before.pee].filter(Boolean).length;
+      expect(moved).toBe(1);
+    }
+  });
+
+  it('costs him the same ticks it would cost Blizzard to drain both bars', () => {
+    // The whole point: Blizzard's `action` holds one verb, so he drains one
+    // channel at 1 unit/tick. Bandit must pay the same, or he clears two bars
+    // while Blizzard clears one — free time on the map.
+    const c = new BanditController();
+    const i = inv({ poop: FULL, pee: FULL });
+    const t = tile('grass');
+    const ticks = runEpisode(c, () => ({ inv: i, tile: t, owner: owner(500), waterAdjacent: false }), ON_TARGET);
+    // Blizzard's cost: (bar - drain floor) / rate, summed per bar. Each channel
+    // is derived from ITS own rate — POOP_RATE and PEE_RATE are independent
+    // knobs that merely happen to both be 1, so doubling one would make this
+    // assertion fail on a legitimate retune of the other.
+    expect(ticks).toBe((FULL - 1) / config.POOP_RATE + (FULL - 1) / config.PEE_RATE);
+  });
+
+  it('keeps shouldHold and tick agreeing on the tick a channel empties', () => {
+    // Regression: the queue used to advance at the top of the NEXT tick, so for
+    // the rest of this frame activeChannel() still named the spent channel.
+    // buildRelieveTargets filters by that channel and a spent one matches no
+    // tile at all, so a shouldHold later in the frame (the arrival tween's
+    // onComplete calls tryChiStep) released him off the yard mid-episode.
+    const c = new BanditController();
+    const i = inv({ poop: FULL, pee: FULL }); // both full -> queue is [poop, pee]
+    const t = tile('grass');
+    c.tick({ inv: i, tile: t, owner: owner(500), waterAdjacent: false }, ON_TARGET);
+    c.commitYard(1);
+    expect(c.activeChannel()).toBe('poop');
+    i.poop = 2; // wind him to one drop from empty
+    const input = { inv: i, tile: t, owner: owner(500), waterAdjacent: false };
+
+    const suppressed = c.tick(input, ON_TARGET).suppressMove; // drains poop 2 -> 1
+    expect(i.poop).toBe(1);
+    expect(c.activeChannel()).toBe('pee');   // handed over in the SAME tick
+    expect(c.shouldHold(input, ON)).toBe(suppressed); // ...so the two still agree
+    expect(suppressed).toBe(true);           // still relieving — he stays put
+  });
+
+  it('releases him in the tick his LAST channel empties, like water at the cap', () => {
+    const c = new BanditController();
+    const i = inv({ poop: FULL, pee: 0 });
+    const t = tile('grass');
+    c.tick({ inv: i, tile: t, owner: owner(500), waterAdjacent: false }, ON_TARGET);
+    i.poop = 2;
+    const input = { inv: i, tile: t, owner: owner(500), waterAdjacent: false };
+    const suppressed = c.tick(input, ON_TARGET).suppressMove;
+    expect(i.poop).toBe(1);
+    expect(c.currentGoal()).toBe('treat');            // episode ended in this tick
+    expect(c.activeChannel()).toBeNull();
+    expect(suppressed).toBe(false);                   // free to move immediately
+    expect(c.shouldHold(input, ON)).toBe(suppressed); // and the pair still agrees
+  });
+
+  it('drains poop fully before starting on pee', () => {
+    const c = new BanditController();
+    const i = inv({ poop: FULL, pee: FULL });
+    const t = tile('grass');
+    c.tick({ inv: i, tile: t, owner: owner(500), waterAdjacent: false }, ON_TARGET);
+    expect(c.activeChannel()).toBe('poop');
+    while (i.poop > 1) c.tick({ inv: i, tile: t, owner: owner(500), waterAdjacent: false }, ON_TARGET);
+    expect(i.pee).toBe(FULL); // poop finished before a single drop of pee
+
+    // The next tick hands over to pee.
+    c.tick({ inv: i, tile: t, owner: owner(500), waterAdjacent: false }, ON_TARGET);
+    expect(c.activeChannel()).toBe('pee');
+    expect(i.pee).toBe(FULL - config.PEE_RATE);
+  });
+
+  it('a pee-triggered trip drains pee only and leaves the poop alone', () => {
+    // The reported bug's other half: he used to drain both, so a full pee bar
+    // also emptied a part-loaded poop bar that had not earned a trip.
+    const c = new BanditController();
+    const i = inv({ poop: 40, pee: FULL });
+    const t = tile('grass');
+    c.tick({ inv: i, tile: t, owner: owner(500), waterAdjacent: false }, ON_TARGET);
+    expect(c.activeChannel()).toBe('pee'); // NOT poop — poop is not full
+    runEpisode(c, () => ({ inv: i, tile: t, owner: owner(500), waterAdjacent: false }), ON_TARGET);
+    expect(i.pee).toBe(1);
+    expect(i.poop).toBe(40);   // untouched
+    expect(c.currentGoal()).toBe('treat');
+    expect(c.activeChannel()).toBeNull();
+  });
+
+  it('picks up a channel that fills mid-episode instead of stranding it', () => {
+    // He stands still to drain poop; heat keeps pushing his pee up. If it tops
+    // out before he finishes, it should be drained on this trip, not deferred.
+    const c = new BanditController();
+    const i = inv({ poop: FULL, pee: 0 });
+    const t = tile('grass');
+    c.tick({ inv: i, tile: t, owner: owner(500), waterAdjacent: false }, ON_TARGET);
+    i.pee = FULL; // heat topped him out while he was busy
+    runEpisode(c, () => ({ inv: i, tile: t, owner: owner(500), waterAdjacent: false }), ON_TARGET);
+    expect(i.poop).toBe(1);
+    expect(i.pee).toBe(1);
+  });
+
+  it('reports no active channel outside relief', () => {
+    const c = new BanditController();
+    expect(c.activeChannel()).toBeNull();
+    c.tick({ inv: inv({ water: THIRSTY }), tile: tile('pavement'), owner: owner(80), waterAdjacent: false }, OFF_TARGET);
+    expect(c.currentGoal()).toBe('water');
+    expect(c.activeChannel()).toBeNull();
+  });
+
+  it('labels the trip by the channel he is draining, not by what he carries', () => {
+    // The reported bug end to end: pee full, poop part-loaded. The old label
+    // sniffed `inv.poop > 1` and so read "Need to Poop!" on a pee trip.
+    const c = new BanditController();
+    const i = inv({ poop: 40, pee: FULL });
+    c.tick({ inv: i, tile: tile('grass'), owner: owner(500), waterAdjacent: false }, ON_TARGET);
+    expect(banditGoalLabel(c.currentGoal(), c.activeChannel())).toBe('Need to Pee!');
   });
 
   it('stays in relief far below the trigger until fully spent', () => {
@@ -327,5 +452,16 @@ describe('BanditController — shouldHold (movement gate) mirrors tick', () => {
     relieving(c, i);
     const maxed: Tile = { ...tile('grass'), dirt: config.POOP_MAX, destruction: config.PEE_MAX };
     bothAgree(c, { inv: i, tile: maxed, owner: owner(80), waterAdjacent: false }, ON, false);
+  });
+
+  it('will not hold on a tile that cannot take the channel he is draining', () => {
+    // Dirt maxed, pee room to spare — useless to a Bandit draining poop. He must
+    // release and walk on rather than stand on a tile he cannot use.
+    const c = new BanditController();
+    const i = inv({ poop: FULL, pee: FULL });
+    relieving(c, i);
+    expect(c.activeChannel()).toBe('poop');
+    const dirtMaxed: Tile = { ...tile('grass'), dirt: config.POOP_MAX };
+    bothAgree(c, { inv: i, tile: dirtMaxed, owner: owner(500), waterAdjacent: false }, ON, false);
   });
 });
