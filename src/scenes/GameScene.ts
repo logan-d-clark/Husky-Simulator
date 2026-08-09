@@ -9,7 +9,7 @@ import { Husky } from '../entities/Husky';
 import { Chihuahua } from '../entities/Chihuahua';
 import { ResourceSystem } from '../systems/ResourceSystem';
 import { WorldActions } from '../systems/WorldActions';
-import { nextBanditMove, banditTweenDuration, isWaterAdjacent, firstReachableRelieveTarget, type RelieveTarget } from '../systems/AISystem';
+import { nextBanditMove, banditTweenDuration, isWaterAdjacent, firstReachableRelieveTarget, banditGoalLabel, type RelieveTarget } from '../systems/AISystem';
 import { OwnerRegistry, dispenseOverMap, buildRelieveTargets } from '../systems/OwnerRegistry';
 import { BanditController, type BanditTickInput } from '../systems/BanditController';
 import { createBadges, updateBadges, type Badge } from '../ui/HouseholdProfile';
@@ -140,6 +140,7 @@ export class GameScene extends Phaser.Scene {
       secondsLeft: this.secondsLeft,
       huskyFood: this.husky.inv.food, chiFood: this.chihuahua.inv.food,
       chiWater: this.chihuahua.inv.water, chiPoop: this.chihuahua.inv.poop, chiPee: this.chihuahua.inv.pee,
+      chiGoalLabel: banditGoalLabel(this.banditController.currentGoal(), this.chihuahua.inv),
       currentTile: { heat: t.heat, dirt: t.dirt, destruction: t.destruction, ownerId: t.ownerId },
     };
   }
@@ -211,22 +212,27 @@ export class GameScene extends Phaser.Scene {
     };
   }
 
-  // Bandit's relieve context this tick: whether he's emptying, the available
-  // relieve-target tiles, and whether he's standing on the yard he's targeting
-  // (the highest-affection reachable one). Empty/false when he isn't emptying.
-  private chiRelieveContext(): { emptying: boolean; relieveTargets: RelieveTarget[]; onTargetYard: boolean } {
-    if (!this.banditController.isEmptying()) return { emptying: false, relieveTargets: [], onTargetYard: false };
+  // Bandit's relieve context this tick: the available relieve-target tiles and
+  // whether he's standing on the yard this episode is committed to. Empty/false
+  // outside relief mode. Also records the yard the AI settled on, so the episode
+  // stays on it even as his own fouling drops that owner's affection.
+  private chiRelieveContext(): { relieveTargets: RelieveTarget[]; onTargetYard: boolean } {
+    if (this.banditController.currentGoal() !== 'relief') return { relieveTargets: [], onTargetYard: false };
     const relieveTargets = buildRelieveTargets(this.map, this.ownerRegistry, this.chihuahua.inv);
-    const target = firstReachableRelieveTarget(this.grid, this.chihuahua.tile, relieveTargets);
-    const targetOwnerId = target ? this.map.tiles[target.tile.row][target.tile.col].ownerId : -1;
+    const target = firstReachableRelieveTarget(
+      this.grid, this.chihuahua.tile, relieveTargets, this.banditController.committedYard(),
+    );
+    if (!target) return { relieveTargets, onTargetYard: false };
+    this.banditController.commitYard(target.ownerId);
     const here = this.map.tiles[this.chihuahua.tile.row][this.chihuahua.tile.col];
-    return { emptying: true, relieveTargets, onTargetYard: here.ownerId === targetOwnerId };
+    return { relieveTargets, onTargetYard: here.ownerId === target.ownerId };
   }
 
   private updateBandit() {
     const input = this.banditInput();
-    const { onTargetYard } = this.chiRelieveContext();
-    const { suppressMove } = this.banditController.tick(input, onTargetYard); // drink/foul side effects, once per tick
+    // Context is pulled lazily, from inside tick, so it reflects the mode tick
+    // just transitioned into rather than the one he was in a moment ago.
+    const { suppressMove } = this.banditController.tick(input, () => this.chiRelieveContext().onTargetYard);
     if (suppressMove) {
       this.chiSprite.setTexture(`chi-${this.chihuahua.facing}-0`); // hold a still frame
       this.retintFouledTile(input.tile);
@@ -248,9 +254,12 @@ export class GameScene extends Phaser.Scene {
 
   private tryChiStep() {
     if (this.over || this.chiMoving) return;
-    const { emptying, relieveTargets, onTargetYard } = this.chiRelieveContext();
+    const { relieveTargets, onTargetYard } = this.chiRelieveContext();
     if (this.banditController.shouldHold(this.banditInput(), onTargetYard)) return; // committed: hold position
-    const move = nextBanditMove(this.grid, this.chihuahua, this.foods, Math.random, relieveTargets, emptying);
+    const move = nextBanditMove(
+      this.grid, this.chihuahua, this.foods, Math.random,
+      this.banditController.currentGoal(), relieveTargets, this.banditController.committedYard(),
+    );
     if (!move) return;
     this.chihuahua.facing = move.dir;
     const to = this.grid.neighbor(this.chihuahua.tile, move.dir);

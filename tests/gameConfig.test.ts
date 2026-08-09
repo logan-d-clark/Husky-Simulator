@@ -32,8 +32,11 @@ describe('gameConfig', () => {
   });
 
   it('has the Bandit need tunables at their defaults', () => {
-    expect(DEFAULTS.BANDIT_GRAB_RADIUS).toBe(2);
-    expect(DEFAULTS.BANDIT_RELIEVE_THRESHOLD).toBe(30);
+    // He only leaves for a yard at a 100%-full channel, and only for water at 10%.
+    expect(DEFAULTS.BANDIT_RELIEVE_THRESHOLD).toBe(100);
+    expect(DEFAULTS.BANDIT_RELIEVE_THRESHOLD).toBe(DEFAULTS.POOP_MAX);
+    expect(DEFAULTS.BANDIT_RELIEVE_THRESHOLD).toBe(DEFAULTS.PEE_MAX);
+    expect(DEFAULTS.BANDIT_THIRST_FRACTION).toBe(0.1);
   });
 
   describe('serializeConfig', () => {
