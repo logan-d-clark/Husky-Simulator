@@ -18,6 +18,10 @@ import { takeFoodAt, type Food } from '../entities/Food';
 import { getDifficultySettings, DEFAULT_DIFFICULTY, type Difficulty } from '../config/difficulty';
 import { attachDevPanel } from '../ui/DevPanel';
 import { assignHouseFaces } from '../world/houseFacades';
+import { audio } from '../audio/AudioEngine';
+import { eatCue, cueForBanditGoal } from '../audio/cues';
+import { WarningTracker, risingEdges } from '../audio/triggers';
+import type { BanditGoal } from '../systems/AISystem';
 import { computeFov } from '../world/fov';
 
 export class GameScene extends Phaser.Scene {
@@ -42,6 +46,13 @@ export class GameScene extends Phaser.Scene {
   private acc = 0;
   private readonly step = 1000 / SIM_HZ;
   private action: 'drink' | 'poop' | 'pee' | 'trick' | null = null;
+  // Audio state. Action cues fire on the rising edge of an action *applying*, so
+  // holding a key gives one sound rather than ten a second; Bandit's cue fires
+  // on a mode change, not per tick.
+  private warnings = new WarningTracker();
+  private actionsApplied: Record<'poop' | 'pee' | 'trick' | 'drink', boolean> =
+    { poop: false, pee: false, trick: false, drink: false };
+  private lastBanditGoal: BanditGoal = 'treat';
   private foods: Food[] = [];
   private foodSprites = new Map<string, Phaser.GameObjects.Image>();
   private secondsLeft = config.GAME_SECONDS;
@@ -80,6 +91,14 @@ export class GameScene extends Phaser.Scene {
     this.chiMoving = false;
     this.acc = 0;
     this.action = null;
+    this.warnings = new WarningTracker();          // a fresh round re-arms every warning
+    this.actionsApplied = { poop: false, pee: false, trick: false, drink: false };
+    // Bandit's brain is per-run state too. Without this, "Play Again" after a
+    // round that ended mid-relief resumes that episode — still committed to a
+    // yard id from the previous round's registry — and immediately fires the
+    // relief cue for a transition that never happened.
+    this.banditController = new BanditController();
+    this.lastBanditGoal = 'treat';
     this.foods = [];
     this.foodSprites = new Map();
     this.secondsLeft = config.GAME_SECONDS;
@@ -113,6 +132,11 @@ export class GameScene extends Phaser.Scene {
 
     // Dev mode: live config panel (backtick-toggled, self-teardown on shutdown).
     if (this.devMode) attachDevPanel(this, { onRestart: () => this.restartGame() });
+
+    // The context was already unlocked by the menu's Start click; resume() here
+    // is a no-op safety net for entering the scene by any other route.
+    audio.resume();
+    audio.startMusic();
   }
 
   // Recompute Blizzard's field of view and reflect it: grey out-of-sight tiles,
@@ -166,6 +190,7 @@ export class GameScene extends Phaser.Scene {
     kb.addKey('Z').on('up', () => { if (this.action === 'pee') this.action = null; });
     kb.addKey('E').on('down', () => { this.action = 'trick'; });
     kb.addKey('E').on('up', () => { if (this.action === 'trick') this.action = null; });
+    kb.addKey('M').on('down', () => { audio.toggleMute(); });
   }
 
   update(_t: number, delta: number) {
@@ -235,6 +260,15 @@ export class GameScene extends Phaser.Scene {
     // Context is pulled lazily, from inside tick, so it reflects the mode tick
     // just transitioned into rather than the one he was in a moment ago.
     const { suppressMove } = this.banditController.tick(input, () => this.chiRelieveContext().onTargetYard);
+
+    // Announce a mode change once, on the transition — this is the player's only
+    // warning that the rival has switched to hunting their best yard.
+    const goal = this.banditController.currentGoal();
+    if (goal !== this.lastBanditGoal) {
+      audio.play(cueForBanditGoal(goal));
+      this.lastBanditGoal = goal;
+    }
+
     if (suppressMove) {
       this.chiSprite.setTexture(`chi-${this.chihuahua.facing}-0`); // hold a still frame
       this.retintFouledTile(input.tile);
@@ -305,11 +339,22 @@ export class GameScene extends Phaser.Scene {
     // 3) standing actions
     const tile = this.currentTile();
     const owner = this.ownerRegistry.get(tile.ownerId);
-    const poopApplied = this.action === 'poop' && WorldActions.poop(this.husky, tile, owner);
-    const peeApplied = this.action === 'pee' && WorldActions.pee(this.husky, tile, owner);
-    const trickApplied = this.action === 'trick' && WorldActions.trick(this.husky, tile, owner);
-    const drinkApplied = this.action === 'drink' && this.nearWater();
+    // Standing actions, and now actually gated on standing. `action` is a latch
+    // cleared only by keyup, so a missed keyup (alt-tab) — or simply holding the
+    // key while running — used to foul every grass tile he crossed, at any
+    // level. Only autoDump drops waste while he's on the move.
+    const standing = !this.moving;
+    const poopApplied = standing && this.action === 'poop' && WorldActions.poop(this.husky, tile, owner);
+    const peeApplied = standing && this.action === 'pee' && WorldActions.pee(this.husky, tile, owner);
+    const trickApplied = standing && this.action === 'trick' && WorldActions.trick(this.husky, tile, owner);
+    const drinkApplied = standing && this.action === 'drink' && this.nearWater();
     if (drinkApplied) ResourceSystem.drink(this.husky.inv);
+
+    // One cue per action START, then silence until he lets go and begins again.
+    const applied = { poop: poopApplied, pee: peeApplied, trick: trickApplied, drink: drinkApplied };
+    for (const started of risingEdges(this.actionsApplied, applied)) audio.play(started);
+    this.actionsApplied = applied;
+    for (const warning of this.warnings.check(this.husky.inv)) audio.play(warning);
 
     // texture: action pose > walk cycle (moving) > idle
     if (poopApplied) this.huskySprite.setTexture('husky-poop');
@@ -353,6 +398,7 @@ export class GameScene extends Phaser.Scene {
 
   private endGame(reason: 'Time' | 'Food' | 'Water') {
     this.over = true;
+    audio.stopMusic();
     this.scene.stop('UI');
     this.scene.start('GameOver', {
       reason,
@@ -384,6 +430,7 @@ export class GameScene extends Phaser.Scene {
     const food = takeFoodAt(this.foods, this.husky.tile.col, this.husky.tile.row);
     if (food) {
       ResourceSystem.eatFood(this.husky.inv, food.value);
+      audio.playSteps(eatCue(food.value, config.TREAT_VALUE)); // richer pickup, higher pitch
       this.currentTile().foodPresent = false;
       const key = this.fkey(food.tile.col, food.tile.row);
       this.foodSprites.get(key)?.destroy();

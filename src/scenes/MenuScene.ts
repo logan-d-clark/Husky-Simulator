@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { PALETTE } from '../config/palette';
 import { DEFAULT_DIFFICULTY, DIFFICULTIES, type Difficulty } from '../config/difficulty';
 import { buildMenuLayout, DIFFICULTY_SEGMENT_HEIGHT } from '../ui/menuLayout';
+import { audio } from '../audio/AudioEngine';
 
 const hex = (c: string) => Phaser.Display.Color.HexStringToColor(c).color;
 const DISPLAY_FONT = '"Trebuchet MS", Arial, sans-serif';
@@ -48,8 +49,18 @@ export class MenuScene extends Phaser.Scene {
     this.buildDifficulty(cx, layout.difficultyY);
 
     // Primary + secondary actions, stacked and centered.
-    this.button(cx, layout.startY, 240, 56, 'Start', true, () =>
-      this.scene.start('Game', { difficulty: this.difficulty, devMode: this.devMode }));
+    // Phaser queues native input and dispatches it during the game step, so a
+    // resume() from a Phaser handler is no longer inside the gesture's call
+    // stack. Chrome/Firefox accept that (sticky activation); WebKit does not, so
+    // also unlock from a native listener the first time anything is pressed.
+    const unlock = () => audio.resume();
+    document.addEventListener('pointerdown', unlock, { once: true });
+    document.addEventListener('keydown', unlock, { once: true });
+
+    this.button(cx, layout.startY, 240, 56, 'Start', true, () => {
+      audio.resume();
+      this.scene.start('Game', { difficulty: this.difficulty, devMode: this.devMode });
+    });
     this.button(cx, layout.howToPlayY, 240, 46, 'How to Play', false, () => this.scene.start('Instructions'));
 
     // Dev mode lives out of the way in the bottom-left corner.

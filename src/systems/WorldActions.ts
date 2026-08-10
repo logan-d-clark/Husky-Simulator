@@ -31,11 +31,19 @@ export const WorldActions = {
     AffectionSystem.applyAction(owner, 'pee');
     return true;
   },
+  // Tricks buy affection with WATER, not food. Food is the score currency and
+  // Bandit never tricks, so charging food here was the whole score-relevant
+  // asymmetry between the dogs — everything else (movement, heat, digestion)
+  // already costs them the same. Blizzard still pays: a tick standing still per
+  // trick, plus the trips to a pond that refills it.
+  // Each resource is only required when its own cost is non-zero, so a zero food
+  // cost doesn't quietly keep blocking the trick at low food.
   trick(actor: Actor, tile: Tile, owner: Owner): boolean {
     if (tile.type !== 'grass') return false;
-    if (actor.inv.food - config.TRICK_COST <= 0 || actor.inv.water - config.TRICK_COST <= 0) return false;
-    actor.inv.food -= config.TRICK_COST;
-    actor.inv.water -= config.TRICK_COST;
+    if (config.TRICK_FOOD_COST > 0 && actor.inv.food - config.TRICK_FOOD_COST <= 0) return false;
+    if (config.TRICK_WATER_COST > 0 && actor.inv.water - config.TRICK_WATER_COST <= 0) return false;
+    actor.inv.food -= config.TRICK_FOOD_COST;
+    actor.inv.water -= config.TRICK_WATER_COST;
     AffectionSystem.applyAction(owner, 'trick');
     return true;
   },
