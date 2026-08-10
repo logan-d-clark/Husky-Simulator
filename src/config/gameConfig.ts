@@ -22,7 +22,13 @@ export interface GameConfig {
   CLEAN_RATE: number;
   CLEAN_COST: number;
   TRICK_RATE: number;
-  TRICK_COST: number;
+  TRICK_FOOD_COST: number;  // food spent per trick — 0 so building affection costs no score
+  TRICK_WATER_COST: number; // water spent per trick — the real price, paid in pond trips
+  WARN_FOOD_LOW: number;    // warn (and redden the HUD) at or below this food
+  WARN_WATER_LOW: number;   // warn at or below this water
+  WARN_PEE_HIGH: number;    // warn at or above this pee
+  MUSIC_VOLUME: number;     // 0..1 gain for the background music bed
+  SFX_VOLUME: number;       // 0..1 gain for cues
   BOWL_LIKELIHOOD: number;
   BAG_LIKELIHOOD: number;
   BOWL_MULTIPLIER: number;
@@ -52,14 +58,25 @@ export const DEFAULTS: Readonly<GameConfig> = Object.freeze({
   WATER_CAP: 125, // WATER_MAX / 8 — matches V1 STATUS_BAR_SCALE cap
   POOP_RATE: 1,
   PEE_RATE: 1,
-  POOP_COST: 1,
-  PEE_COST: 1,
+  // Affection lost per drop of waste, before the owner's sensitivity multiplier.
+  // Calibrated so one full 99-drop load costs an average yard a quarter of the
+  // scale: 25 affection / 99 drops / median family sensitivity 3 = 0.084. That
+  // puts a forgiving (sens 1) yard at -8, an average (sens 3) at -25, and the
+  // harshest (sens 5) at -42, instead of every yard being zeroed by one visit.
+  POOP_COST: 0.084,
+  PEE_COST: 0.084,
   POOP_MAX: 100,
   PEE_MAX: 100,
   CLEAN_RATE: 1,
   CLEAN_COST: 1,
   TRICK_RATE: 1,
-  TRICK_COST: 1,
+  TRICK_FOOD_COST: 0,
+  TRICK_WATER_COST: 1,
+  WARN_FOOD_LOW: 20,
+  WARN_WATER_LOW: 30,
+  WARN_PEE_HIGH: 80,
+  MUSIC_VOLUME: 0.18,
+  SFX_VOLUME: 0.5,
   BOWL_LIKELIHOOD: 0.3,
   BAG_LIKELIHOOD: 0.05,
   BOWL_MULTIPLIER: 2,

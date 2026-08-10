@@ -7,7 +7,6 @@ import { tolerancePips, pipString, heatLabel } from '../ui/indicators';
 import type { GameScene } from './GameScene';
 
 export const HUD_H = 180;
-const LOW_FOOD = 20;
 
 // Left zone: Blizzard's own stats. Right zone: the tile Blizzard is standing on.
 const LEFT_X = 24, LEFT_BAR = 168;
@@ -108,7 +107,9 @@ export class UIScene extends Phaser.Scene {
     };
 
     // Food: unbounded value (no bar/scale). Text reddens when low.
-    const low = s.food < LOW_FOOD;
+    // Shares WARN_FOOD_LOW with the audio warning, so the red text and the
+    // sound can never disagree about what "low" means.
+    const low = s.food <= config.WARN_FOOD_LOW;
     this.texts.food.setText(`🍖 Food ${s.food.toFixed(0)}`);
     this.texts.food.setColor(low ? PALETTE.affection : PALETTE.hudText);
 

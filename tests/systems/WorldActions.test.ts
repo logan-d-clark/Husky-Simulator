@@ -19,19 +19,68 @@ describe('WorldActions', () => {
     expect(WorldActions.poop(h, t, o)).toBe(true);
     expect(t.dirt).toBe(1);
     expect(h.inv.poop).toBe(9);
-    expect(o.affection).toBe(49);
+    expect(o.affection).toBeCloseTo(50 - config.POOP_COST * o.sensitivity);
   });
   it('poop refused on non-grass', () => {
     const h = new Husky(); h.inv.poop = 10;
     const t = grass(); t.type = 'pavement'; const o = owner();
     expect(WorldActions.poop(h, t, o)).toBe(false);
   });
-  it('trick costs food+water and raises affection', () => {
+  it('trick spends water only — food is the score currency and stays untouched', () => {
     const h = new Husky(); const t = grass(); const o = owner();
-    WorldActions.trick(h, t, o);
-    expect(o.affection).toBe(51);
-    expect(h.inv.food).toBeCloseTo(49);
-    expect(h.inv.water).toBeCloseTo(49);
+    const food0 = h.inv.food, water0 = h.inv.water;
+    expect(WorldActions.trick(h, t, o)).toBe(true);
+    expect(o.affection).toBe(50 + config.TRICK_RATE);
+    expect(h.inv.food).toBeCloseTo(food0);                              // no score burned
+    expect(h.inv.water).toBeCloseTo(water0 - config.TRICK_WATER_COST);  // paid in water
+  });
+
+  it('trick is refused when the water would run out', () => {
+    const h = new Husky(); h.inv.water = config.TRICK_WATER_COST;
+    const t = grass(); const o = owner();
+    expect(WorldActions.trick(h, t, o)).toBe(false);
+    expect(o.affection).toBe(50);
+  });
+
+  it('a zero food cost does not keep gating the trick at low food', () => {
+    // Regression: the old guard tested `food - COST <= 0` against a shared cost,
+    // so zeroing the food price alone would still have blocked a hungry dog.
+    const h = new Husky(); h.inv.food = 0.5; // nearly starving, but tricks are free
+    const t = grass(); const o = owner();
+    expect(WorldActions.trick(h, t, o)).toBe(true);
+    expect(h.inv.food).toBeCloseTo(0.5);
+  });
+
+  describe('foul cost calibration', () => {
+    // One full load is a drain from POOP_MAX down to WorldActions' `> 1` floor.
+    const FULL_LOAD_DROPS = (config.POOP_MAX - 1) / config.POOP_RATE;
+    const emptyOnto = (sensitivity: number): number => {
+      const h = new Husky(); h.inv.poop = config.POOP_MAX;
+      const t = grass();
+      const o = new Owner({ id: 5, affection: 100, sensitivity, treatRateBase: 0, name: 'T' });
+      while (WorldActions.poop(h, t, o)) { /* drain to the floor */ }
+      return o.affection;
+    };
+
+    it('leaves an average (median sensitivity 3) yard at about 75%', () => {
+      expect(emptyOnto(3)).toBeCloseTo(100 - FULL_LOAD_DROPS * config.POOP_COST * 3, 5);
+      // The stated budget: a full load costs an average yard no more than a
+      // quarter of the scale.
+      expect(100 - emptyOnto(3)).toBeLessThanOrEqual(25);
+      expect(100 - emptyOnto(3)).toBeGreaterThan(24);
+    });
+
+    it('costs a forgiving yard less and a harsh yard more', () => {
+      const survives = (s: number) => 100 - FULL_LOAD_DROPS * config.POOP_COST * s;
+      expect(emptyOnto(1)).toBeGreaterThan(emptyOnto(3)); // sens 1 keeps more
+      expect(emptyOnto(5)).toBeLessThan(emptyOnto(3));    // sens 5 keeps less
+      expect(emptyOnto(1)).toBeCloseTo(survives(1), 5);   // ~92 at the defaults
+      expect(emptyOnto(5)).toBeCloseTo(survives(5), 5);   // ~58 at the defaults
+    });
+
+    it('never zeroes a yard in a single visit, even the harshest', () => {
+      expect(emptyOnto(5)).toBeGreaterThan(0);
+    });
   });
   it('autoDump empties maxed poop into an empty tile', () => {
     const h = new Husky(); h.inv.poop = 100; // POOP_MAX

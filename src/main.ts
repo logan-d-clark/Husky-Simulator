@@ -7,6 +7,7 @@ import { UIScene } from './scenes/UIScene';
 import { GameOverScene } from './scenes/GameOverScene';
 import { InstructionsScene } from './scenes/InstructionsScene';
 import { DESIGN_WIDTH, DESIGN_HEIGHT } from './config/constants';
+import { audio } from './audio/AudioEngine';
 import { HUD_H } from './scenes/UIScene';
 
 const game = new Phaser.Game({
@@ -19,5 +20,7 @@ const game = new Phaser.Game({
   scene: [BootScene, PreloadScene, MenuScene, InstructionsScene, GameScene, UIScene, GameOverScene],
 });
 
-// Debug handle: expose the running game for console/automation inspection.
+// Debug handles: expose the running game and audio engine for console/automation
+// inspection.
 (window as unknown as { game: Phaser.Game }).game = game;
+(window as unknown as { audio: typeof audio }).audio = audio;
