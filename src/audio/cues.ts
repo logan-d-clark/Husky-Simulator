@@ -27,7 +27,18 @@ export const CUES: Record<CueName, ToneStep[]> = {
 
   // --- Bandit: lower, quieter, duller ----------------------------------------
   banditTreat:  [step(57, 0.08, 'triangle', 0.24), step(59, 0.10, 'triangle', 0.22)],
-  banditRelief: [step(53, 0.10, 'sawtooth', 0.20), step(46, 0.20, 'sawtooth', 0.18)], // he's coming for your yard
+  // The "oh crap" cue: he has just committed to fouling your best yard, and the
+  // player has a window to respond. Deliberately the LONGEST cue in the game —
+  // it earns its weight from length, low register and a tritone against the
+  // root (the interval that reads as menace), not from volume. It still mixes
+  // under Blizzard's cues: this is a warning, not a reward, and it must not
+  // mask the player's own feedback.
+  banditRelief: [
+    step(50, 0.16, 'sawtooth', 0.24),  // D3
+    step(44, 0.16, 'sawtooth', 0.24),  // G#2 — tritone below, the sour step
+    step(38, 0.22, 'sawtooth', 0.22),  // D2
+    step(32, 0.30, 'sawtooth', 0.20),  // G#1 — sinks out of the mix
+  ],
   banditWater:  [step(55, 0.07, 'sine', 0.24), step(62, 0.09, 'sine', 0.20)],
 
   // --- Warnings: insistent, unlike either of the above -----------------------

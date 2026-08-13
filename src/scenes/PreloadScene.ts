@@ -25,6 +25,8 @@ export class PreloadScene extends Phaser.Scene {
     this.load.image('treat', new URL('../assets/treat.png', import.meta.url).href);
     this.load.image('bowl', new URL('../assets/bowl.png', import.meta.url).href);
     this.load.image('bag', new URL('../assets/bag.png', import.meta.url).href);
+    // The pup cup has no V1 pixel-art original, so it ships as an SVG.
+    svg('pupcup', new URL('../assets/pupcup.svg', import.meta.url).href, 18, 20);
 
     for (const d of DIRS) {
       svg(`husky-${d}-0`, new URL(`../assets/husky-${d}-0.svg`, import.meta.url).href, 24, 24);

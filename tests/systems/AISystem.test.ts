@@ -25,10 +25,12 @@ const grid = new Grid(parseMap(Array(13).fill('G0').join(',')));
 const streetGrid = new Grid(parseMap(['G0,P0,G0', 'G0,P0,G0', 'G0,P0,G0'].join('\n')));
 
 describe('smellRadius', () => {
-  it('bag > bowl > treat', () => {
+  it('pupcup > bag > bowl > treat', () => {
+    expect(smellRadius('pupcup')).toBe(config.SMELL_PUPCUP);
     expect(smellRadius('bag')).toBe(config.SMELL_BAG);
     expect(smellRadius('bowl')).toBe(config.SMELL_BOWL);
     expect(smellRadius('treat')).toBe(config.SMELL_TREAT);
+    expect(config.SMELL_PUPCUP).toBeGreaterThan(config.SMELL_BAG);
     expect(config.SMELL_BAG).toBeGreaterThan(config.SMELL_BOWL);
     expect(config.SMELL_BOWL).toBeGreaterThan(config.SMELL_TREAT);
   });
