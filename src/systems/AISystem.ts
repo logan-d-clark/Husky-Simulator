@@ -34,6 +34,7 @@ export interface Bandit {
 // Bandit's smell radius (tiles) for a food type — bigger/higher-value foods
 // carry farther.
 export function smellRadius(type: FoodType): number {
+  if (type === 'pupcup') return config.SMELL_PUPCUP;
   return type === 'bag' ? config.SMELL_BAG : type === 'bowl' ? config.SMELL_BOWL : config.SMELL_TREAT;
 }
 

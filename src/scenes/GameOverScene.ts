@@ -2,7 +2,19 @@ import Phaser from 'phaser';
 import { PALETTE } from '../config/palette';
 import { HUSKY_NAME, CHI_NAME } from '../config/names';
 
-interface Gmeta { reason: 'Time' | 'Food' | 'Water'; huskyFood: number; chiFood: number; }
+import { DEFAULT_DIFFICULTY, type Difficulty } from '../config/difficulty';
+
+// `difficulty`/`devMode` ride along purely so "Play Again" can replay the round
+// the player just lost. Without them scene.start('Game') passes no data and
+// GameScene.init falls back to the default, silently downgrading a Blizzlord
+// run to Puppy — rival speed, fog of war and the Bandit gate delay all change.
+interface Gmeta {
+  reason: 'Time' | 'Food' | 'Water';
+  huskyFood: number;
+  chiFood: number;
+  difficulty?: Difficulty;
+  devMode?: boolean;
+}
 
 export class GameOverScene extends Phaser.Scene {
   private meta!: Gmeta;
@@ -27,7 +39,12 @@ export class GameOverScene extends Phaser.Scene {
         .setOrigin(0.5).setInteractive({ useHandCursor: true });
       t.on('pointerdown', fn);
     };
-    btn(460, 'Play Again', () => { this.scene.start('Game'); });
+    btn(460, 'Play Again', () => {
+      this.scene.start('Game', {
+        difficulty: this.meta.difficulty ?? DEFAULT_DIFFICULTY,
+        devMode: this.meta.devMode ?? false,
+      });
+    });
     btn(520, 'Main Menu', () => { this.scene.start('Menu'); });
   }
 }

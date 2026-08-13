@@ -1,9 +1,24 @@
 import { describe, it, expect } from 'vitest';
-import { takeFoodAt } from '../../src/entities/Food';
+import { takeFoodAt, foodValue } from '../../src/entities/Food';
 import type { Food } from '../../src/entities/Food';
+import { config } from '../../src/config/gameConfig';
 
 const food = (col: number, row: number, type: Food['type'] = 'treat', value = 10): Food => ({
   type, value, tile: { col, row },
+});
+
+describe('foodValue', () => {
+  it('scales each type off TREAT_VALUE by its own multiplier', () => {
+    expect(foodValue('treat')).toBe(config.TREAT_VALUE);
+    expect(foodValue('bowl')).toBe(config.BOWL_MULTIPLIER * config.TREAT_VALUE);
+    expect(foodValue('bag')).toBe(config.BAG_MULTIPLIER * config.TREAT_VALUE);
+    expect(foodValue('pupcup')).toBe(config.PUPCUP_MULTIPLIER * config.TREAT_VALUE);
+  });
+
+  it('makes the pup cup the most valuable food by a wide margin', () => {
+    expect(foodValue('pupcup')).toBeGreaterThan(foodValue('bag'));
+    expect(foodValue('pupcup')).toBeGreaterThan(2 * foodValue('bag'));
+  });
 });
 
 describe('takeFoodAt', () => {

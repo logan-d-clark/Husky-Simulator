@@ -3,8 +3,10 @@ import {
   DIFFICULTIES,
   DEFAULT_DIFFICULTY,
   getDifficultySettings,
+  banditDelaySeconds,
   type Difficulty,
 } from '../src/config/difficulty';
+import { config, resetConfig } from '../src/config/gameConfig';
 
 describe('difficulty registry', () => {
   it('defines puppy, husky and blizzlord', () => {
@@ -43,5 +45,31 @@ describe('difficulty registry', () => {
     expect(getDifficultySettings('impossible' as Difficulty)).toEqual(
       DIFFICULTIES[DEFAULT_DIFFICULTY],
     );
+  });
+});
+
+describe('banditDelaySeconds', () => {
+  it('scales the live config base by the difficulty multiplier', () => {
+    for (const d of ['puppy', 'husky', 'blizzlord'] as const) {
+      expect(banditDelaySeconds(d)).toBe(
+        config.BANDIT_DELAY_SECONDS * DIFFICULTIES[d].banditDelayMultiplier,
+      );
+    }
+  });
+
+  it('gives a shorter reprieve the harder the level', () => {
+    expect(banditDelaySeconds('blizzlord')).toBeLessThan(banditDelaySeconds('husky'));
+    expect(banditDelaySeconds('husky')).toBeLessThan(banditDelaySeconds('puppy'));
+  });
+
+  it('follows a dev-panel edit to the base', () => {
+    const before = banditDelaySeconds('husky');
+    config.BANDIT_DELAY_SECONDS *= 2;
+    expect(banditDelaySeconds('husky')).toBe(before * 2);
+    resetConfig();
+  });
+
+  it('falls back to the default difficulty for an unknown level', () => {
+    expect(banditDelaySeconds('nonsense' as Difficulty)).toBe(banditDelaySeconds(DEFAULT_DIFFICULTY));
   });
 });

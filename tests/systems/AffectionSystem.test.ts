@@ -38,4 +38,45 @@ describe('AffectionSystem', () => {
     const o = new Owner(data({ affection: 10, treatRateBase: 0.0001 }));
     expect(AffectionSystem.rollDispense(o, () => 0.99)).toBeNull();
   });
+
+  describe('pup cups', () => {
+    // rollDispense draws twice at a maxed yard: once for the pup cup, then once
+    // for the existing chain. `rolls` feeds an explicit sequence so each draw is
+    // controlled rather than inferred.
+    const rolls = (...vals: number[]) => { let i = 0; return () => vals[Math.min(i++, vals.length - 1)]; };
+    // treatRateActive = base * affection/25, so base 0.25 at affection 100 gives
+    // p = 1 and the likelihood bands are their literal values. (A huge base, as
+    // the bag test uses, makes every band exceed 1 so no roll can ever miss.)
+    const BASE = 0.25;
+    const maxed = () => new Owner(data({ affection: config.PUPCUP_THRESHOLD, treatRateBase: BASE }));
+
+    it('needs a perfectly maxed yard — one point short is never enough', () => {
+      const almost = new Owner(data({ affection: config.PUPCUP_THRESHOLD - 1, treatRateBase: BASE }));
+      // Even the luckiest possible roll cannot produce one.
+      expect(AffectionSystem.rollDispense(almost, rolls(0))).not.toBe('pupcup');
+    });
+
+    it('dispenses at a maxed yard on a winning roll', () => {
+      expect(AffectionSystem.rollDispense(maxed(), rolls(0.0001))).toBe('pupcup');
+    });
+
+    it('STILL dispenses bags at a maxed yard when the pup cup roll misses', () => {
+      // The regression the independent roll exists to prevent: folding pup cups
+      // into the chain at equal likelihood would have eaten the bag's band, so
+      // maxing a yard would silently stop it producing bags.
+      expect(AffectionSystem.rollDispense(maxed(), rolls(0.99, 0.0001))).toBe('bag');
+    });
+
+    it('leaves the treat/bowl/bag chain untouched below the threshold', () => {
+      // Same owner, same single roll value, with and without the pup cup branch
+      // reachable — the outcome must not depend on affection being 99 vs 100.
+      const below = new Owner(data({ affection: 95, treatRateBase: BASE }));
+      expect(AffectionSystem.rollDispense(below, rolls(0.0001))).toBe('bag');
+      expect(AffectionSystem.rollDispense(maxed(), rolls(0.99, 0.0001))).toBe('bag');
+    });
+
+    it('is as likely as a bag — the 100-affection gate is the scarcity', () => {
+      expect(config.PUPCUP_LIKELIHOOD).toBe(config.BAG_LIKELIHOOD);
+    });
+  });
 });

@@ -27,11 +27,30 @@ describe('cues', () => {
     }
   });
 
+  const total = (n: CueName) => CUES[n].reduce((s, t) => s + t.dur, 0);
+
   it('keeps every cue short enough to not overlap the next tick meaningfully', () => {
     for (const name of names) {
-      const total = CUES[name].reduce((s, t) => s + t.dur, 0);
-      expect(total, name).toBeLessThan(0.6);
+      // banditRelief is the deliberate exception: it marks the moment he
+      // commits to fouling your best yard, and length is the point. 1.0s is
+      // generous headroom over its ~0.84s, while still bounding it well under
+      // the ~2.6s music bar so it cannot smear across the bed.
+      const bound = name === 'banditRelief' ? 1.0 : 0.6;
+      expect(total(name), name).toBeLessThan(bound);
     }
+  });
+
+  it('makes the relief warning the longest cue in the game', () => {
+    for (const name of names) {
+      if (name === 'banditRelief') continue;
+      expect(total('banditRelief'), name).toBeGreaterThan(total(name));
+    }
+  });
+
+  it('sinks the relief warning below his other cues in pitch', () => {
+    const lowest = (n: CueName) => Math.min(...CUES[n].map((s) => s.freq));
+    expect(lowest('banditRelief')).toBeLessThan(lowest('banditTreat'));
+    expect(lowest('banditRelief')).toBeLessThan(lowest('banditWater'));
   });
 
   it('mixes Bandit quieter than Blizzard so the rival never masks your own feedback', () => {

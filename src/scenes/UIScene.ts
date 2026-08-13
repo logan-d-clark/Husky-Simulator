@@ -3,7 +3,7 @@ import { PALETTE } from '../config/palette';
 import { GRID, DESIGN_HEIGHT } from '../config/constants';
 import { config } from '../config/gameConfig';
 import { HUSKY_NAME, CHI_NAME } from '../config/names';
-import { tolerancePips, pipString, heatLabel } from '../ui/indicators';
+import { tolerancePips, pipString, heatLabel, thresholdMarkerX } from '../ui/indicators';
 import type { GameScene } from './GameScene';
 
 export const HUD_H = 180;
@@ -29,10 +29,19 @@ const BANDIT_DIM = '#b7a482', BANDIT_BAR_ALPHA = 0.6;
 // His mode line sits a row below the four stats, brighter than them so the
 // player can read his intent at a glance. ROW(4)=146 clears the card's floor (168).
 const BANDIT_GOAL = '#e8c98a';
+// Food-threshold markers on the affection bar. Thresholds are read live from
+// config so a dev-panel edit moves the marker with the behaviour it describes.
+const FOOD_THRESHOLDS = [
+  { key: 'bowl', threshold: () => config.BOWL_THRESHOLD },
+  { key: 'bag', threshold: () => config.BAG_THRESHOLD },
+  { key: 'pupcup', threshold: () => config.PUPCUP_THRESHOLD },
+] as const;
+const AFFECTION_BAR_Y = 121, AFFECTION_ICON_Y = 150;
 
 export class UIScene extends Phaser.Scene {
   private g!: Phaser.GameObjects.Graphics;
   private texts: Record<string, Phaser.GameObjects.Text> = {};
+  private thresholdIcons: Record<string, Phaser.GameObjects.Image> = {};
   constructor() { super('UI'); }
 
   create() {
@@ -83,6 +92,13 @@ export class UIScene extends Phaser.Scene {
     mk('tolL', CS_A, y0 + 88);
     mk('tolPips', CS_A + 82, y0 + 88, '15px', 0, '#ffd27f');
     mk('likesL', CS_A, y0 + 118);
+    // Food thresholds on the affection bar: what this family's affection has to
+    // reach before each food can appear on their lawn. The icons sit below the
+    // bar (which ends at y0+135) with the card floor at y0+168.
+    for (const t of FOOD_THRESHOLDS) {
+      this.thresholdIcons[t.key] = this.add.image(0, y0 + AFFECTION_ICON_Y, t.key)
+        .setOrigin(0.5, 0.5).setDisplaySize(13, 14).setDepth(2);
+    }
     // sub-column B
     mk('heat', CS_B, y0 + 58);
     mk('csPoopL', CS_B, y0 + 88);
@@ -142,7 +158,15 @@ export class UIScene extends Phaser.Scene {
     this.texts.tolL.setText('Tolerance');
     this.texts.tolPips.setText(pipString(tolerancePips(info.sensitivity)));
     this.texts.likesL.setText('Likes you');
-    bar(CS_A_BAR, y0 + 121, info.affection, 100, PALETTE.affection);
+    bar(CS_A_BAR, y0 + AFFECTION_BAR_Y, info.affection, 100, PALETTE.affection);
+    // Referent line + icon per food threshold, so the bar says what it buys.
+    for (const t of FOOD_THRESHOLDS) {
+      const x = thresholdMarkerX(t.threshold(), CS_A_BAR, BAR_W);
+      const reached = info.affection >= t.threshold();
+      this.g.fillStyle(Phaser.Display.Color.HexStringToColor(PALETTE.hudText).color, reached ? 0.9 : 0.4)
+        .fillRect(Math.round(x) - 1, y0 + AFFECTION_BAR_Y - 3, 2, BAR_H + 6);
+      this.thresholdIcons[t.key].setX(x).setAlpha(reached ? 1 : 0.45);
+    }
     const hot = heatLabel(s.currentTile.heat) === 'High';
     this.texts.heat.setText(`Heat  ${hot ? 'High' : 'Low'}`);
     this.texts.heat.setColor(hot ? '#ff8a5a' : '#7fbfe0');

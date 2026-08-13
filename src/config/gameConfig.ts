@@ -35,6 +35,10 @@ export interface GameConfig {
   BAG_MULTIPLIER: number;
   BOWL_THRESHOLD: number;
   BAG_THRESHOLD: number;
+  PUPCUP_MULTIPLIER: number;  // the ultimate food — a maxed-affection reward
+  PUPCUP_LIKELIHOOD: number;
+  PUPCUP_THRESHOLD: number;   // affection needed; compared with >=, see rollDispense
+  SMELL_PUPCUP: number;       // Bandit smells it from further than anything else
   START_FOOD: number;
   START_WATER: number;
   HEAT_PAVEMENT: number;
@@ -44,6 +48,7 @@ export interface GameConfig {
   SMELL_BOWL: number;
   SMELL_BAG: number;
   PATROL_SPEED_MULTIPLIER: number; // Bandit's per-tile duration x this while patrolling (2 = half speed)
+  BANDIT_DELAY_SECONDS: number;     // base time Bandit stays penned; scaled per difficulty
   BANDIT_RELIEVE_THRESHOLD: number; // poop/pee level that sends Bandit to a yard to relieve (default: full)
   BANDIT_THIRST_FRACTION: number;   // fraction of WATER_CAP at or below which Bandit goes for water
 }
@@ -83,6 +88,10 @@ export const DEFAULTS: Readonly<GameConfig> = Object.freeze({
   BAG_MULTIPLIER: 4,
   BOWL_THRESHOLD: 50,
   BAG_THRESHOLD: 90,
+  PUPCUP_MULTIPLIER: 12,   // 120 food vs a bag's 40
+  PUPCUP_LIKELIHOOD: 0.05, // as likely as a bag; the 100-affection gate is the scarcity
+  PUPCUP_THRESHOLD: 100,
+  SMELL_PUPCUP: 14,
   START_FOOD: 50,
   START_WATER: 50,
   HEAT_PAVEMENT: 0.05,
@@ -92,6 +101,7 @@ export const DEFAULTS: Readonly<GameConfig> = Object.freeze({
   SMELL_BOWL: 8,
   SMELL_BAG: 12,
   PATROL_SPEED_MULTIPLIER: 2,
+  BANDIT_DELAY_SECONDS: 120,
   BANDIT_RELIEVE_THRESHOLD: 100, // == POOP_MAX/PEE_MAX: he only goes when a channel is 100% full
   BANDIT_THIRST_FRACTION: 0.1,
 });
@@ -103,7 +113,10 @@ export const config: GameConfig = { ...DEFAULTS };
 // applies on the NEXT game start: heat is baked into tiles at map parse,
 // GAME_SECONDS seeds the clock, and START_* seed the husky's inventory.
 export const INIT_ONLY_KEYS: ReadonlySet<keyof GameConfig> = new Set<keyof GameConfig>([
-  'HEAT_GRASS', 'HEAT_PAVEMENT', 'GAME_SECONDS', 'START_FOOD', 'START_WATER',
+  // BANDIT_DELAY_SECONDS is read once into the gate clock in GameScene.create,
+  // exactly like GAME_SECONDS seeds the round clock — without this the dev panel
+  // would advertise it as live and silently ignore a mid-round edit.
+  'HEAT_GRASS', 'HEAT_PAVEMENT', 'GAME_SECONDS', 'START_FOOD', 'START_WATER', 'BANDIT_DELAY_SECONDS',
 ]);
 
 /** Restore every field to its DEFAULTS value (mutates in place). */

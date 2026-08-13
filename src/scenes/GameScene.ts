@@ -2,7 +2,8 @@ import Phaser from 'phaser';
 import mapCsv from '../data/map.csv?raw';
 import { parseMap, type GameMap } from '../world/MapParser';
 import { Grid } from '../world/Grid';
-import { GRID, SIM_HZ, TICKS_PER_SECOND } from '../config/constants';
+import { GRID, SIM_HZ, TICKS_PER_SECOND, GATE_TILES, CHI_START_TILE } from '../config/constants';
+import { setGate, advanceGateSeconds } from '../world/gate';
 import { config } from '../config/gameConfig';
 import type { Tile } from '../world/tiles';
 import { Husky } from '../entities/Husky';
@@ -15,7 +16,7 @@ import { BanditController, type BanditTickInput } from '../systems/BanditControl
 import { createBadges, updateBadges, type Badge } from '../ui/HouseholdProfile';
 import type { Direction, TileCoord } from '../types';
 import { takeFoodAt, type Food } from '../entities/Food';
-import { getDifficultySettings, DEFAULT_DIFFICULTY, type Difficulty } from '../config/difficulty';
+import { getDifficultySettings, banditDelaySeconds, DEFAULT_DIFFICULTY, type Difficulty } from '../config/difficulty';
 import { attachDevPanel } from '../ui/DevPanel';
 import { assignHouseFaces } from '../world/houseFacades';
 import { audio } from '../audio/AudioEngine';
@@ -53,6 +54,12 @@ export class GameScene extends Phaser.Scene {
   private actionsApplied: Record<'poop' | 'pee' | 'trick' | 'drink', boolean> =
     { poop: false, pee: false, trick: false, drink: false };
   private lastBanditGoal: BanditGoal = 'treat';
+  // Bandit starts the round penned behind the Grumbles' driveway gate. Tinted
+  // apart from the ordinary fences so the player reads it as a thing that opens.
+  private static readonly GATE_TINT = 0xd98a3d;
+  private gateSprites: Phaser.GameObjects.Image[] = [];
+  private gateSecondsLeft = 0;
+  private gateTickInSecond = 0;
   private foods: Food[] = [];
   private foodSprites = new Map<string, Phaser.GameObjects.Image>();
   private secondsLeft = config.GAME_SECONDS;
@@ -108,16 +115,22 @@ export class GameScene extends Phaser.Scene {
     this.badgeTickCounter = 0;
     this.tileSprites = [];
     this.fovSet = null;
+    this.gateSprites = [];
+    this.gateSecondsLeft = banditDelaySeconds(this.difficulty);
+    this.gateTickInSecond = 0;
 
     this.map = parseMap(mapCsv);
     this.grid = new Grid(this.map);
     this.renderMap();
+    // Shut the gate AFTER renderMap: drawFences runs once and keeps no
+    // references, so a gate drawn by it could never be removed.
+    this.shutGate();
 
     this.husky = new Husky();
     const p = this.grid.tileToPixel(this.husky.tile);
     this.huskySprite = this.add.image(p.x, p.y, 'husky-left-0').setDepth(10);
 
-    this.chihuahua = new Chihuahua({ col: 2, row: 2 });
+    this.chihuahua = new Chihuahua({ ...CHI_START_TILE });
     const cp = this.grid.tileToPixel(this.chihuahua.tile);
     this.chiSprite = this.add.image(cp.x, cp.y, 'chi-right-0').setDepth(9);
 
@@ -275,7 +288,11 @@ export class GameScene extends Phaser.Scene {
     } else {
       this.chiSprite.setTexture(`chi-${this.chihuahua.facing}-${Math.floor(performance.now() / 160) % 2}`);
     }
-    ResourceSystem.applyHeat(this.chihuahua.inv, input.tile.heat);
+    // Penned at home, his owners feed and water him: no drain while the gate is
+    // shut. The pen has no water tile and the Grumbles sit at affection 0, so
+    // nothing spawns there either — without this he would drain to empty and
+    // latch permanently into water-seeking with nowhere to drink.
+    if (!this.gateShut()) ResourceSystem.applyHeat(this.chihuahua.inv, input.tile.heat);
     if (!suppressMove) this.tryChiStep(); // held this tick? don't also re-decide movement (avoids a 1-frame still→glide)
     if (this.fovSet) {
       this.chiSprite.setVisible(this.fovSet.has(this.fkey(this.chihuahua.tile.col, this.chihuahua.tile.row)));
@@ -300,8 +317,10 @@ export class GameScene extends Phaser.Scene {
     this.chihuahua.facing = move.dir;
     const to = this.grid.neighbor(this.chihuahua.tile, move.dir);
     this.chihuahua.tile = to;
-    ResourceSystem.applyMoveCost(this.chihuahua.inv); // food/water down, poop/pee up (min 0 food is fine — no death)
-    this.chihuahua.inv.food = Math.max(0, this.chihuahua.inv.food);
+    if (!this.gateShut()) { // see updateBandit: no drain while he's penned at home
+      ResourceSystem.applyMoveCost(this.chihuahua.inv); // food/water down, poop/pee up (min 0 food is fine — no death)
+      this.chihuahua.inv.food = Math.max(0, this.chihuahua.inv.food);
+    }
     this.chiMoving = true;
     // Patrol steps glide at half speed (2x duration); a scent/water chase runs full speed.
     const base = this.step * this.chiSpeedMultiplier;
@@ -388,6 +407,20 @@ export class GameScene extends Phaser.Scene {
     this.updateBandit();
 
     // 6) sim-time / game-over. Dev mode freezes the clock and is invincible.
+    // Bandit works out the latch. The gate runs on its OWN clock, deliberately
+    // outside the dev-mode freeze: dev mode stops the round timer, and nesting
+    // the gate inside that would leave it shut for the whole session — killing
+    // every Bandit knob the dev panel exists to tune, in the only mode that has
+    // a dev panel.
+    if (this.gateShut()) {
+      this.gateTickInSecond = (this.gateTickInSecond + 1) % TICKS_PER_SECOND;
+      if (this.gateTickInSecond === 0) {
+        const next = advanceGateSeconds(this.gateSecondsLeft);
+        this.gateSecondsLeft = next.secondsLeft;
+        if (next.open) this.openGate();
+      }
+    }
+
     if (!this.devMode) {
       this.tickInSecond = (this.tickInSecond + 1) % TICKS_PER_SECOND;
       if (this.tickInSecond === 0) this.secondsLeft -= 1;
@@ -404,6 +437,8 @@ export class GameScene extends Phaser.Scene {
       reason,
       huskyFood: this.husky.inv.food,
       chiFood: this.chihuahua.inv.food,
+      difficulty: this.difficulty, // so "Play Again" replays the same round
+      devMode: this.devMode,
     });
   }
 
@@ -475,6 +510,29 @@ export class GameScene extends Phaser.Scene {
       }
     }
   }
+
+  // The gate IS a fence. Toggling the same `fences.right` flag the map format
+  // already uses means Grid.canMove, both dogs' BFS, and every other consumer
+  // of the fence rules need to know nothing about gates at all.
+  private shutGate() {
+    const T = GRID.TILE;
+    setGate(this.map, true);
+    for (const g of GATE_TILES) {
+      const spr = this.add.image(g.col * T + T - 4, g.row * T, 'fenceV')
+        .setOrigin(0, 0).setDepth(6).setTint(GameScene.GATE_TINT);
+      this.gateSprites.push(spr);
+    }
+  }
+
+  private openGate() {
+    setGate(this.map, false);
+    for (const s of this.gateSprites) s.destroy();
+    this.gateSprites = [];
+    audio.play('banditTreat'); // he's out — announce the mode he leaves home in
+  }
+
+  /** True while Bandit is still penned in the Grumbles' yard. */
+  private gateShut(): boolean { return this.gateSprites.length > 0; }
 
   private drawFences(tile: Tile) {
     const T = GRID.TILE;
