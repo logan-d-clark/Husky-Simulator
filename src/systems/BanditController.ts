@@ -11,6 +11,16 @@ export interface BanditTickInput {
   tile: Tile;            // the tile Bandit is standing on
   owner: Owner;          // that tile's owner (for affection on a foul)
   waterAdjacent: boolean; // is Bandit next to a water tile?
+  /** A deployed rawhide, when one exists. `reachable` is decided by the same
+   *  BFS that moves him, so targeting and movement can't disagree. */
+  rawhide?: { reachable: boolean; onIt: boolean } | null;
+}
+
+// What a rawhide interrupts, so it can be handed back intact.
+interface SuspendedGoal {
+  goal: BanditGoal;
+  drainQueue: WasteChannel[];
+  yardOwnerId: number | null;
 }
 
 // Bandit's three-mode brain (Phaser-free so it unit-tests directly). He is in
@@ -39,6 +49,8 @@ export class BanditController {
   // queue to empty before starting the next — one channel at a time, like
   // Blizzard. Empty queue outside relief.
   private drainQueue: WasteChannel[] = [];
+  // Set only while a rawhide has pulled him off something.
+  private suspended: SuspendedGoal | null = null;
 
   /** Bandit's current behaviour mode — GameScene reads this to route his
    *  movement and to label his HUD block. */
@@ -106,9 +118,40 @@ export class BanditController {
     }
   }
 
+  // The rawhide is the ONE thing that preempts a committed mode — that is the
+  // point of the item, and dropping it mid-relief is exactly when a player wants
+  // it to work. To keep that from costing the emptying guarantee it SUSPENDS
+  // rather than cancels: whatever he was doing (and the drain queue and yard
+  // that went with it) is handed back when the rawhide is gone, so a Bandit
+  // pulled off a half-drained lawn returns to finish it.
+  //
+  // He only ever enters while the rawhide is reachable, and leaves the moment it
+  // stops being — so an unreachable one (penned behind the gate, walled off by a
+  // repeller) is simply ignored rather than latching him forever.
+  private updateRawhide(rawhide: BanditTickInput['rawhide']): void {
+    const available = !!rawhide && rawhide.reachable;
+    if (available && this.goal !== 'rawhide') {
+      this.suspended = { goal: this.goal, drainQueue: this.drainQueue, yardOwnerId: this.yardOwnerId };
+      // Clear the live state as well as snapshotting it: while he is chewing he
+      // is not relieving, and `activeChannel()` promises null when he isn't.
+      this.goal = 'rawhide';
+      this.drainQueue = [];
+      this.yardOwnerId = null;
+      return;
+    }
+    if (!available && this.goal === 'rawhide') {
+      const prev = this.suspended ?? { goal: 'treat' as BanditGoal, drainQueue: [], yardOwnerId: null };
+      this.goal = prev.goal;
+      this.drainQueue = prev.drainQueue;
+      this.yardOwnerId = prev.yardOwnerId;
+      this.suspended = null;
+    }
+  }
+
   // Mode transitions. Only `treat` picks a new mode, so nothing preempts an
   // episode in progress; relief outranks water when both trigger at once.
   private updateGoal(inv: Inventory): void {
+    if (this.goal === 'rawhide') return; // handled by updateRawhide
     if (this.goal === 'treat') {
       if (needsRelieve(inv)) { this.goal = 'relief'; this.drainQueue = this.fullChannels(inv); }
       else if (isThirsty(inv)) this.goal = 'water';
@@ -124,6 +167,7 @@ export class BanditController {
   // the yard the AI is targeting, so he travels to the most-liked yard rather
   // than fouling whatever grass is under his feet.
   shouldHold(input: BanditTickInput, onTargetYard: boolean): boolean {
+    if (this.goal === 'rawhide') return !!input.rawhide?.onIt; // chewing: he doesn't budge
     if (this.goal === 'relief') return onTargetYard && canFoulTile(input.inv, input.tile, this.activeChannel());
     if (this.goal === 'water') return input.waterAdjacent && input.inv.water < config.WATER_CAP;
     return false;
@@ -136,7 +180,13 @@ export class BanditController {
   // painting a walk frame on a dog that then holds still. Only relief evaluates
   // it, so the other two modes skip the caller's map scan entirely.
   tick(input: BanditTickInput, onTargetYard: () => boolean): { suppressMove: boolean } {
+    this.updateRawhide(input.rawhide);
     this.updateGoal(input.inv);
+
+    // Rawhide: walk to it, then sit and chew. The eat countdown lives with the
+    // deployed item in GameScene, which removes it when it's finished — at which
+    // point `rawhide` goes null and updateRawhide hands his old mode back.
+    if (this.goal === 'rawhide') return { suppressMove: !!input.rawhide?.onIt };
 
     // Relief: foul the current tile only when it's in the committed yard and it
     // can take it (hold + drain); otherwise release so he keeps travelling to

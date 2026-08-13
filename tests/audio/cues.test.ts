@@ -7,7 +7,7 @@ const names = Object.keys(CUES) as CueName[];
 describe('cues', () => {
   it('covers every sound the game triggers', () => {
     expect(names.sort()).toEqual([
-      'banditRelief', 'banditTreat', 'banditWater',
+      'banditRawhide', 'banditRelief', 'banditTreat', 'banditWater',
       'drink', 'eat', 'pee', 'poop', 'trick',
       'warnFood', 'warnPee', 'warnWater',
     ]);
@@ -110,5 +110,24 @@ describe('cues', () => {
         expect(CUES[cueForBanditGoal(g)]).toBeDefined();
       }
     });
+  });
+});
+
+describe('cueForBanditGoal — rawhide', () => {
+  it('has its own cue, distinct from the others', () => {
+    expect(cueForBanditGoal('rawhide')).toBe('banditRawhide');
+    for (const g of ['treat', 'relief', 'water'] as const) {
+      expect(cueForBanditGoal(g)).not.toBe('banditRawhide');
+    }
+  });
+  it('names a cue that exists, like every other goal', () => {
+    for (const g of ['treat', 'relief', 'water', 'rawhide'] as const) {
+      expect(CUES[cueForBanditGoal(g)]).toBeDefined();
+    }
+  });
+  it('is the one Bandit cue that rises — he took the bait, that is good news', () => {
+    const steps = CUES.banditRawhide;
+    expect(steps[steps.length - 1].freq).toBeGreaterThan(steps[0].freq);
+    expect(CUES.banditRelief[CUES.banditRelief.length - 1].freq).toBeLessThan(CUES.banditRelief[0].freq);
   });
 });

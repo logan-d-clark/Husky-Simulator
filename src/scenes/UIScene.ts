@@ -5,6 +5,7 @@ import { config } from '../config/gameConfig';
 import { HUSKY_NAME, CHI_NAME } from '../config/names';
 import { tolerancePips, pipString, heatLabel, thresholdMarkerX } from '../ui/indicators';
 import type { GameScene } from './GameScene';
+import { ITEMS, ITEM_TYPES } from '../entities/Item';
 
 export const HUD_H = 180;
 
@@ -37,11 +38,14 @@ const FOOD_THRESHOLDS = [
   { key: 'pupcup', threshold: () => config.PUPCUP_THRESHOLD },
 ] as const;
 const AFFECTION_BAR_Y = 121, AFFECTION_ICON_Y = 150;
+// Four item slots across Blizzard's 346-wide card.
+const ITEM_SLOT_W = 82;
 
 export class UIScene extends Phaser.Scene {
   private g!: Phaser.GameObjects.Graphics;
   private texts: Record<string, Phaser.GameObjects.Text> = {};
   private thresholdIcons: Record<string, Phaser.GameObjects.Image> = {};
+  private itemIcons: Record<string, Phaser.GameObjects.Image> = {};
   constructor() { super('UI'); }
 
   create() {
@@ -81,6 +85,14 @@ export class UIScene extends Phaser.Scene {
     mk('waterL', LEFT_X, y0 + ROW(1));
     mk('poopL', LEFT_X, y0 + ROW(2));
     mk('peeL', LEFT_X, y0 + ROW(3));
+    // Item belt, aligned with Bandit's goal line on the card opposite. Each slot
+    // is the number key, the item's sprite, and how many he is carrying.
+    ITEM_TYPES.forEach((type, i) => {
+      const x = LEFT_X + i * ITEM_SLOT_W;
+      this.add.text(x, y0 + ROW(4) + 2, ITEMS[type].key, { color: '#ffd27f', fontSize: '12px', fontStyle: 'bold' });
+      this.itemIcons[type] = this.add.image(x + 20, y0 + ROW(4) + 9, type).setDisplaySize(15, 17);
+      this.texts[`item-${type}`] = this.add.text(x + 32, y0 + ROW(4) + 1, '', { color: PALETTE.hudText, fontSize: '14px' });
+    });
     // Bandit (rival) — mirrors Blizzard's rows, dimmer accent
     mk('bFood', BANDIT_X, y0 + ROW(0), '15px', 0, BANDIT_DIM);
     mk('bWater', BANDIT_X, y0 + ROW(1), '15px', 0, BANDIT_DIM);
@@ -136,6 +148,12 @@ export class UIScene extends Phaser.Scene {
     this.texts.waterL.setText(`💧 Water ${s.water.toFixed(0)}`);
     this.texts.poopL.setText(`💩 Poop ${s.poop.toFixed(0)}`);
     this.texts.peeL.setText(`🟡 Pee ${s.pee.toFixed(0)}`);
+    // Item belt: dim a slot he can't use, so the row reads at a glance.
+    for (const type of ITEM_TYPES) {
+      const n = s.items[type] ?? 0;
+      this.texts[`item-${type}`].setText(`${n}`).setColor(n > 0 ? PALETTE.hudText : '#6b6055');
+      this.itemIcons[type].setAlpha(n > 0 ? 1 : 0.3);
+    }
 
     // Bandit (rival) — same stats as Blizzard, dimmer bars/text.
     bar(BANDIT_BAR, y0 + ROW(1) + BAR_DY, s.chiWater, config.WATER_CAP, PALETTE.water, BANDIT_BAR_W, BANDIT_BAR_ALPHA);

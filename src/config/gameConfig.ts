@@ -29,6 +29,14 @@ export interface GameConfig {
   WARN_PEE_HIGH: number;    // warn at or above this pee
   MUSIC_VOLUME: number;     // 0..1 gain for the background music bed
   SFX_VOLUME: number;       // 0..1 gain for cues
+  RAWHIDE_EAT_SECONDS: number;   // how long Bandit is pinned once he reaches one
+  REPELLER_RADIUS: number;       // tiles Bandit will not enter around a repeller
+  REPELLER_SECONDS: number;
+  ZOOM_SECONDS: number;          // zoomies duration
+  ZOOM_SPEED_MULTIPLIER: number; // Blizzard's speed while zooming
+  ITEM_DROP_PER_TICK: number;    // base per-tick chance an item drops
+  ITEM_DROP_FOOD_SCALE: number;  // food held per doubling of that chance
+  ITEM_MILESTONE_FOOD: number;   // free item each time this much food is reached
   BOWL_LIKELIHOOD: number;
   BAG_LIKELIHOOD: number;
   BOWL_MULTIPLIER: number;
@@ -82,6 +90,16 @@ export const DEFAULTS: Readonly<GameConfig> = Object.freeze({
   WARN_PEE_HIGH: 80,
   MUSIC_VOLUME: 0.18,
   SFX_VOLUME: 0.5,
+  RAWHIDE_EAT_SECONDS: 60,
+  REPELLER_RADIUS: 6,
+  REPELLER_SECONDS: 60,
+  ZOOM_SECONDS: 30,
+  ZOOM_SPEED_MULTIPLIER: 2,
+  // ~3 drops per 20-minute round at 50 food held, ~6 at 800, ~12 at 2400. A
+  // realistic ramp lands around 6-9, plus one per 1000-food milestone.
+  ITEM_DROP_PER_TICK: 0.00025,
+  ITEM_DROP_FOOD_SCALE: 800,
+  ITEM_MILESTONE_FOOD: 1000,
   BOWL_LIKELIHOOD: 0.3,
   BAG_LIKELIHOOD: 0.05,
   BOWL_MULTIPLIER: 2,

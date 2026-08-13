@@ -465,3 +465,148 @@ describe('BanditController — shouldHold (movement gate) mirrors tick', () => {
     bothAgree(c, { inv: i, tile: dirtMaxed, owner: owner(500), waterAdjacent: false }, ON, false);
   });
 });
+
+describe('BanditController — rawhide (the one thing that preempts him)', () => {
+  const bait = (over: Partial<{ reachable: boolean; onIt: boolean }> = {}) =>
+    ({ reachable: true, onIt: false, ...over });
+  const input = (i: Inventory, rawhide: { reachable: boolean; onIt: boolean } | null, tileType: Tile['type'] = 'grass') =>
+    ({ inv: i, tile: tile(tileType), owner: owner(80), waterAdjacent: false, rawhide });
+
+  it('pulls him out of treat seeking', () => {
+    const c = new BanditController();
+    c.tick(input(inv(), bait()), OFF_TARGET);
+    expect(c.currentGoal()).toBe('rawhide');
+  });
+
+  it('preempts a committed relief episode — the whole point of the item', () => {
+    const c = new BanditController();
+    const i = inv({ poop: FULL });
+    c.tick(input(i, null), ON_TARGET);
+    expect(c.currentGoal()).toBe('relief');
+    c.tick(input(i, bait()), ON_TARGET);
+    expect(c.currentGoal()).toBe('rawhide');
+  });
+
+  it('preempts a refill too', () => {
+    const c = new BanditController();
+    const i = inv({ water: THIRSTY });
+    c.tick(input(i, null), OFF_TARGET);
+    expect(c.currentGoal()).toBe('water');
+    c.tick(input(i, bait()), OFF_TARGET);
+    expect(c.currentGoal()).toBe('rawhide');
+  });
+
+  it('hands back the interrupted episode — same channel, same yard', () => {
+    const c = new BanditController();
+    const i = inv({ poop: FULL, pee: FULL });
+    c.tick(input(i, null), ON_TARGET);
+    c.commitYard(7);
+    expect(c.currentGoal()).toBe('relief');
+    expect(c.activeChannel()).toBe('poop');
+
+    c.tick(input(i, bait()), ON_TARGET);          // dragged away mid-drain
+    expect(c.currentGoal()).toBe('rawhide');
+    expect(c.activeChannel()).toBeNull();         // not relieving while chewing
+
+    c.tick(input(i, null), ON_TARGET);            // rawhide eaten and gone
+    expect(c.currentGoal()).toBe('relief');
+    expect(c.activeChannel()).toBe('poop');       // resumes the very same channel
+    expect(c.committedYard()).toBe(7);            // ...on the very same lawn
+  });
+
+  it('never touches an unreachable rawhide, and does not latch on one', () => {
+    // Penned behind the gate, or walled off by a repeller. If he committed to it
+    // he would sit in a mode whose exit condition can never be met.
+    const c = new BanditController();
+    const i = inv({ poop: FULL });
+    c.tick(input(i, bait({ reachable: false })), ON_TARGET);
+    expect(c.currentGoal()).toBe('relief');
+    expect(c.activeChannel()).toBe('poop');
+  });
+
+  it('lets go the moment it stops being reachable', () => {
+    const c = new BanditController();
+    const i = inv();
+    c.tick(input(i, bait()), OFF_TARGET);
+    expect(c.currentGoal()).toBe('rawhide');
+    c.tick(input(i, bait({ reachable: false })), OFF_TARGET);
+    expect(c.currentGoal()).toBe('treat');
+  });
+
+  it('travels while away from it and sits still once on it', () => {
+    const c = new BanditController();
+    const i = inv();
+    expect(c.tick(input(i, bait({ onIt: false })), OFF_TARGET).suppressMove).toBe(false);
+    expect(c.tick(input(i, bait({ onIt: true })), OFF_TARGET).suppressMove).toBe(true);
+  });
+
+  it('keeps shouldHold and tick agreeing in every rawhide case', () => {
+    for (const onIt of [true, false]) {
+      const c = new BanditController();
+      const i = inv();
+      const args = input(i, bait({ onIt }));
+      const suppressed = c.tick(args, OFF_TARGET).suppressMove;
+      expect(c.shouldHold(args, OFF)).toBe(suppressed);
+    }
+  });
+
+  it('does not drain or drink while chewing', () => {
+    const c = new BanditController();
+    const i = inv({ poop: FULL, water: THIRSTY });
+    const args = { ...input(i, bait({ onIt: true })), waterAdjacent: true };
+    c.tick(args, ON_TARGET);
+    expect(i.poop).toBe(FULL);       // no fouling the lawn he is chewing on
+    expect(i.water).toBe(THIRSTY);   // and no drinking either
+  });
+});
+
+describe('BanditController — rawhide does not lose the episode it interrupted', () => {
+  const bait = { reachable: true, onIt: false };
+  const chewing = { reachable: true, onIt: true };
+  const args = (i: Inventory, rawhide: { reachable: boolean; onIt: boolean } | null) =>
+    ({ inv: i, tile: tile('grass'), owner: owner(80), waterAdjacent: true, rawhide });
+
+  it('keeps the ORIGINAL suspended episode across many chewing ticks', () => {
+    // Regression guard: if updateRawhide ever re-snapshotted while already in
+    // rawhide mode, the second tick would overwrite the real episode with the
+    // empty rawhide state and he'd fall back to treat forever — silently losing
+    // the emptying guarantee that is the whole point of suspend/restore.
+    const c = new BanditController();
+    const i = inv({ poop: FULL, pee: FULL });
+    c.tick(args(i, null), ON_TARGET);
+    c.commitYard(4);
+    expect(c.currentGoal()).toBe('relief');
+
+    c.tick(args(i, bait), ON_TARGET);           // pulled away
+    for (let n = 0; n < 12; n++) c.tick(args(i, chewing), ON_TARGET); // walks up, chews
+    expect(c.currentGoal()).toBe('rawhide');
+
+    c.tick(args(i, null), ON_TARGET);           // finished it
+    expect(c.currentGoal()).toBe('relief');
+    expect(c.activeChannel()).toBe('poop');
+    expect(c.committedYard()).toBe(4);
+  });
+
+  it('hands back a water episode too, not just relief', () => {
+    const c = new BanditController();
+    const i = inv({ water: THIRSTY });
+    c.tick(args(i, null), OFF_TARGET);
+    expect(c.currentGoal()).toBe('water');
+
+    c.tick(args(i, bait), OFF_TARGET);
+    for (let n = 0; n < 5; n++) c.tick(args(i, chewing), OFF_TARGET);
+    expect(c.currentGoal()).toBe('rawhide');
+
+    c.tick(args(i, null), OFF_TARGET);
+    expect(c.currentGoal()).toBe('water');
+  });
+
+  it('drops him back to treat when he was only treat-seeking', () => {
+    const c = new BanditController();
+    const i = inv();
+    c.tick(args(i, bait), OFF_TARGET);
+    c.tick(args(i, null), OFF_TARGET);
+    expect(c.currentGoal()).toBe('treat');
+    expect(c.committedYard()).toBeNull();
+  });
+});
