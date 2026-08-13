@@ -79,7 +79,15 @@ function isWaterAdjacent(grid: Grid, t: TileCoord): boolean {
 
 // BFS for the first-step direction toward the nearest tile satisfying isGoal
 // (only walkable tiles are traversed). null if no goal is reachable.
-export function bfsFirstStep(grid: Grid, from: TileCoord, isGoal: (t: TileCoord) => boolean): Direction | null {
+// `blocked` marks tiles the walker refuses to ENTER — Bandit's repeller
+// exclusion. It is never applied to `from`, so a walker already standing in a
+// blocked region can always route out of it. Only Bandit's callers pass one;
+// this is why the repeller can't live in Grid.canMove the way the gate does,
+// since canMove is shared by both dogs and the whole point here is asymmetry.
+export function bfsFirstStep(
+  grid: Grid, from: TileCoord, isGoal: (t: TileCoord) => boolean,
+  blocked: (t: TileCoord) => boolean = () => false,
+): Direction | null {
   const visited = new Set<string>([key(from.col, from.row)]);
   const queue: { coord: TileCoord; firstDir: Direction | null }[] = [{ coord: from, firstDir: null }];
   while (queue.length > 0) {
@@ -91,6 +99,7 @@ export function bfsFirstStep(grid: Grid, from: TileCoord, isGoal: (t: TileCoord)
       const k = key(nxt.col, nxt.row);
       if (visited.has(k)) continue;
       visited.add(k);
+      if (blocked(nxt)) continue; // marked visited first: never revisited, never entered
       queue.push({ coord: nxt, firstDir: node.firstDir ?? dir });
     }
   }
@@ -108,8 +117,14 @@ const pick = (dirs: Direction[], rng: () => number): Direction => dirs[Math.floo
 // back, and only occasionally dips into an adjacent yard — from which he then
 // biases straight back toward the street. Stateless: the "return to street"
 // emerges from a strong pavement preference, so no history is stored on Bandit.
-export function patrolStep(grid: Grid, from: TileCoord, facing: Direction, rng: () => number): Direction | null {
-  const open = DIRS.filter((d) => grid.canMove(from, d));
+export function patrolStep(
+  grid: Grid, from: TileCoord, facing: Direction, rng: () => number,
+  blocked: (t: TileCoord) => boolean = () => false,
+): Direction | null {
+  // Wandering must respect the repeller too, or he'd stroll into a zone his
+  // pathfinding carefully routes around. If every way out is blocked he is
+  // standing inside one, and `repellerBlocks` has already stood that one down.
+  const open = DIRS.filter((d) => grid.canMove(from, d) && !blocked(grid.neighbor(from, d)));
   if (open.length === 0) return null;
   const typeOf = (d: Direction): string | undefined => {
     const n = grid.neighbor(from, d);
@@ -143,7 +158,8 @@ export interface RelieveTarget { tile: TileCoord; ownerId: number; affection: nu
 // Bandit's three mutually-exclusive behaviour modes. He stays in whichever one
 // he entered until its exit condition fires — no mode preempts another, which is
 // what stops him dribbling waste across half the block.
-export type BanditGoal = 'treat' | 'relief' | 'water';
+// `rawhide` is the one mode that preempts the others — see BanditController.
+export type BanditGoal = 'treat' | 'relief' | 'water' | 'rawhide';
 
 // The HUD's label for a goal. Relief names the channel he is actually draining,
 // taken from the episode's own state — NOT inferred from what he happens to be
@@ -151,6 +167,7 @@ export type BanditGoal = 'treat' | 'relief' | 'water';
 // holding drainable poop", so a pee-triggered trip read "Need to Poop!" whenever
 // he also carried poop.
 export function banditGoalLabel(goal: BanditGoal, channel: WasteChannel | null): string {
+  if (goal === 'rawhide') return 'Rawhide!';
   if (goal === 'water') return 'Needs Water!';
   if (goal === 'relief') return channel === 'pee' ? 'Need to Pee!' : 'Need to Poop!';
   return 'Looking for Treats';
@@ -183,6 +200,7 @@ export function needsRelieve(inv: Inventory): boolean {
 // which is how the episode hands off to the next-best yard. Pure.
 export function firstReachableRelieveTarget(
   grid: Grid, from: TileCoord, relieveTargets: RelieveTarget[], committedOwnerId: number | null = null,
+  blocked: (t: TileCoord) => boolean = () => false,
 ): { tile: TileCoord; ownerId: number; dir: Direction | null } | null {
   const stepTo = (target: RelieveTarget): { tile: TileCoord; ownerId: number; dir: Direction | null } | null => {
     // The tile under his paws is a hit with no step to take. bfsFirstStep can
@@ -192,7 +210,7 @@ export function firstReachableRelieveTarget(
     if (target.tile.col === from.col && target.tile.row === from.row) {
       return { tile: target.tile, ownerId: target.ownerId, dir: null };
     }
-    const dir = bfsFirstStep(grid, from, (t) => t.col === target.tile.col && t.row === target.tile.row);
+    const dir = bfsFirstStep(grid, from, (t) => t.col === target.tile.col && t.row === target.tile.row, blocked);
     return dir ? { tile: target.tile, ownerId: target.ownerId, dir } : null;
   };
   if (committedOwnerId !== null) {
@@ -216,26 +234,45 @@ export function firstReachableRelieveTarget(
 // falling back to the half-speed street patrol. Each goal falls through to the
 // treat chain when its own target is unreachable, so he never stands still.
 // All goal-directed moves are full-speed chases.
+export interface BanditMoveContext {
+  goal?: BanditGoal;
+  relieveTargets?: RelieveTarget[];
+  committedOwnerId?: number | null;
+  /** Where a deployed rawhide is, when he's going for it. */
+  rawhideTile?: TileCoord | null;
+  /** Tiles he refuses to enter (repeller zones). */
+  blocked?: (t: TileCoord) => boolean;
+}
+
 export function nextBanditMove(
-  grid: Grid, bandit: Bandit, foods: Food[], rng: () => number,
-  goal: BanditGoal = 'treat', relieveTargets: RelieveTarget[] = [], committedOwnerId: number | null = null,
+  grid: Grid, bandit: Bandit, foods: Food[], rng: () => number, ctx: BanditMoveContext = {},
 ): BanditMove | null {
+  const goal = ctx.goal ?? 'treat';
+  const blocked = ctx.blocked ?? (() => false);
+  const stepTo = (isGoal: (t: TileCoord) => boolean) => bfsFirstStep(grid, bandit.tile, isGoal, blocked);
+
+  if (goal === 'rawhide' && ctx.rawhideTile) {
+    const t = ctx.rawhideTile;
+    const dir = stepTo((c) => c.col === t.col && c.row === t.row);
+    if (dir) return { dir, mode: 'chase' };
+    if (bandit.tile.col === t.col && bandit.tile.row === t.row) return null; // arrived; settle in
+  }
   if (goal === 'relief') {
-    const target = firstReachableRelieveTarget(grid, bandit.tile, relieveTargets, committedOwnerId);
+    const target = firstReachableRelieveTarget(grid, bandit.tile, ctx.relieveTargets ?? [], ctx.committedOwnerId ?? null, blocked);
     if (target) return target.dir ? { dir: target.dir, mode: 'chase' } : null; // null dir: already on it, stay
   }
   if (goal === 'water') {
-    const toWater = bfsFirstStep(grid, bandit.tile, (t) => isWaterAdjacent(grid, t));
+    const toWater = stepTo((t) => isWaterAdjacent(grid, t));
     if (toWater) return { dir: toWater, mode: 'chase' };
   }
   const food = banditSettings.omniscient
     ? bestFoodAnywhere(bandit.tile, foods)
     : bestSmelledFood(bandit.tile, foods);
   if (food) {
-    const toFood = bfsFirstStep(grid, bandit.tile, (t) => t.col === food.tile.col && t.row === food.tile.row);
+    const toFood = stepTo((t) => t.col === food.tile.col && t.row === food.tile.row);
     if (toFood) return { dir: toFood, mode: 'chase' };
   }
-  const dir = patrolStep(grid, bandit.tile, bandit.facing, rng);
+  const dir = patrolStep(grid, bandit.tile, bandit.facing, rng, blocked);
   return dir ? { dir, mode: 'patrol' } : null;
 }
 

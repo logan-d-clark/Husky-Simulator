@@ -11,7 +11,7 @@ import { midiToFreq, type ToneStep, type Wave } from './tones';
 
 export type CueName =
   | 'eat' | 'drink' | 'pee' | 'poop' | 'trick'
-  | 'banditTreat' | 'banditRelief' | 'banditWater'
+  | 'banditTreat' | 'banditRelief' | 'banditWater' | 'banditRawhide'
   | 'warnFood' | 'warnWater' | 'warnPee';
 
 const step = (midi: number, dur: number, wave: Wave, gain: number): ToneStep =>
@@ -40,6 +40,8 @@ export const CUES: Record<CueName, ToneStep[]> = {
     step(32, 0.30, 'sawtooth', 0.20),  // G#1 — sinks out of the mix
   ],
   banditWater:  [step(55, 0.07, 'sine', 0.24), step(62, 0.09, 'sine', 0.20)],
+  // He took the bait — the one Bandit cue that is good news, so it rises.
+  banditRawhide: [step(52, 0.08, 'triangle', 0.26), step(59, 0.08, 'triangle', 0.26), step(64, 0.14, 'triangle', 0.22)],
 
   // --- Warnings: insistent, unlike either of the above -----------------------
   warnFood:  [step(70, 0.11, 'triangle', 0.44), step(63, 0.20, 'triangle', 0.42)],
@@ -62,7 +64,8 @@ export function eatCue(value: number, treatValue: number): ToneStep[] {
 
 /** Bandit's mode-change cue. Pure so the three-way mapping is testable —
  *  GameScene has no test harness, so left inline a swapped case would ship. */
-export function cueForBanditGoal(goal: 'treat' | 'relief' | 'water'): CueName {
+export function cueForBanditGoal(goal: 'treat' | 'relief' | 'water' | 'rawhide'): CueName {
+  if (goal === 'rawhide') return 'banditRawhide';
   if (goal === 'relief') return 'banditRelief';
   if (goal === 'water') return 'banditWater';
   return 'banditTreat';

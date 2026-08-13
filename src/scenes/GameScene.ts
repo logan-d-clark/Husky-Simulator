@@ -4,13 +4,19 @@ import { parseMap, type GameMap } from '../world/MapParser';
 import { Grid } from '../world/Grid';
 import { GRID, SIM_HZ, TICKS_PER_SECOND, GATE_TILES, CHI_START_TILE } from '../config/constants';
 import { setGate, advanceGateSeconds } from '../world/gate';
+import { ITEMS, ITEM_TYPES, type ItemType } from '../entities/Item';
+import {
+  emptyCounts, itemDropChance, randomItemType,
+  grant, consume, repellerBlocks, milestonesToGrant, nextTutorial, tickRepellers,
+  type ItemCounts, type Repeller,
+} from '../systems/ItemSystem';
 import { config } from '../config/gameConfig';
 import type { Tile } from '../world/tiles';
 import { Husky } from '../entities/Husky';
 import { Chihuahua } from '../entities/Chihuahua';
 import { ResourceSystem } from '../systems/ResourceSystem';
 import { WorldActions } from '../systems/WorldActions';
-import { nextBanditMove, banditTweenDuration, isWaterAdjacent, firstReachableRelieveTarget, banditGoalLabel, type RelieveTarget } from '../systems/AISystem';
+import { nextBanditMove, banditTweenDuration, isWaterAdjacent, firstReachableRelieveTarget, banditGoalLabel, bestFoodAnywhere, bfsFirstStep, type RelieveTarget } from '../systems/AISystem';
 import { OwnerRegistry, dispenseOverMap, buildRelieveTargets } from '../systems/OwnerRegistry';
 import { BanditController, type BanditTickInput } from '../systems/BanditController';
 import { createBadges, updateBadges, type Badge } from '../ui/HouseholdProfile';
@@ -60,6 +66,18 @@ export class GameScene extends Phaser.Scene {
   private gateSprites: Phaser.GameObjects.Image[] = [];
   private gateSecondsLeft = 0;
   private gateTickInSecond = 0;
+
+  // --- items ---------------------------------------------------------------
+  private items: ItemCounts = emptyCounts();
+  private itemPickups: { type: ItemType; tile: TileCoord; sprite: Phaser.GameObjects.Image }[] = [];
+  private seenItems = new Set<ItemType>();       // which tutorials have shown this round
+  private tutorialQueue: ItemType[] = [];
+  private tutorialShowing = false;
+  private milestonesPaid = 0;                    // highest 1000-food milestone already granted
+  private rawhide: { tile: TileCoord; secondsLeft: number; sprite: Phaser.GameObjects.Image } | null = null;
+  private repellers: (Repeller & { sprite: Phaser.GameObjects.Image; ring: Phaser.GameObjects.Graphics; label: Phaser.GameObjects.Text })[] = [];
+  private zoomSecondsLeft = 0;
+  private itemTickInSecond = 0;
   private foods: Food[] = [];
   private foodSprites = new Map<string, Phaser.GameObjects.Image>();
   private secondsLeft = config.GAME_SECONDS;
@@ -118,6 +136,17 @@ export class GameScene extends Phaser.Scene {
     this.gateSprites = [];
     this.gateSecondsLeft = banditDelaySeconds(this.difficulty);
     this.gateTickInSecond = 0;
+    // Items are per-run state too — Phaser does not reset class fields.
+    this.items = emptyCounts();
+    this.itemPickups = [];
+    this.seenItems = new Set();
+    this.tutorialQueue = [];
+    this.tutorialShowing = false;
+    this.milestonesPaid = 0;
+    this.rawhide = null;
+    this.repellers = [];
+    this.zoomSecondsLeft = 0;
+    this.itemTickInSecond = 0;
 
     this.map = parseMap(mapCsv);
     this.grid = new Grid(this.map);
@@ -146,6 +175,15 @@ export class GameScene extends Phaser.Scene {
     // Dev mode: live config panel (backtick-toggled, self-teardown on shutdown).
     if (this.devMode) attachDevPanel(this, { onRestart: () => this.restartGame() });
 
+    // Phaser resets its keys on scene pause WITHOUT emitting keyup, and drops
+    // any real keyup that arrives while paused. Both of this scene's input
+    // latches would survive a tutorial pause — so releasing the key you walked
+    // in on would leave Blizzard sprinting, or fouling, after the panel closes.
+    this.events.on(Phaser.Scenes.Events.RESUME, () => {
+      this.held = { up: false, down: false, left: false, right: false };
+      this.action = null;
+    });
+
     // The context was already unlocked by the menu's Start click; resume() here
     // is a no-op safety net for entering the scene by any other route.
     audio.resume();
@@ -166,6 +204,11 @@ export class GameScene extends Phaser.Scene {
       }
     }
     for (const [key, spr] of this.foodSprites) spr.setVisible(fov.has(key));
+    // Item pickups hide in the dark like food does. Without this an item dropped
+    // out of sight stays invisible forever (granted from nowhere when he walks
+    // over it), and one dropped in sight shows through the fog for the rest of
+    // the round.
+    for (const i of this.itemPickups) i.sprite.setVisible(fov.has(this.fkey(i.tile.col, i.tile.row)));
     this.chiSprite.setVisible(fov.has(`${this.chihuahua.tile.col},${this.chihuahua.tile.row}`));
   }
 
@@ -178,6 +221,7 @@ export class GameScene extends Phaser.Scene {
       huskyFood: this.husky.inv.food, chiFood: this.chihuahua.inv.food,
       chiWater: this.chihuahua.inv.water, chiPoop: this.chihuahua.inv.poop, chiPee: this.chihuahua.inv.pee,
       chiGoalLabel: banditGoalLabel(this.banditController.currentGoal(), this.banditController.activeChannel()),
+      items: { ...this.items },
       currentTile: { heat: t.heat, dirt: t.dirt, destruction: t.destruction, ownerId: t.ownerId },
     };
   }
@@ -204,6 +248,12 @@ export class GameScene extends Phaser.Scene {
     kb.addKey('E').on('down', () => { this.action = 'trick'; });
     kb.addKey('E').on('up', () => { if (this.action === 'trick') this.action = null; });
     kb.addKey('M').on('down', () => { audio.toggleMute(); });
+    // Bind by key CODE. Phaser's addKey resolves a string through KeyCodes, and
+    // KeyCodes has no '1' — the digits are ONE..FOUR — so addKey('1') silently
+    // registers a key that can never fire.
+    for (const type of ITEM_TYPES) {
+      kb.addKey(ITEMS[type].keyCode).on('down', () => this.deployItem(type));
+    }
   }
 
   update(_t: number, delta: number) {
@@ -220,16 +270,28 @@ export class GameScene extends Phaser.Scene {
   // calls no-ops, so a tile's move cost is applied exactly once per step.
   private tryStep() {
     if (this.over || this.moving) return;
-    const dir = (['up', 'down', 'left', 'right'] as Direction[]).find((d) => this.held[d]);
+    const zooming = this.zoomSecondsLeft > 0;
+    // Zoomies: the player is off the wheel. He drives himself with the SAME
+    // omniscient chain Bandit uses — reused, not reimplemented — so there is
+    // only one "find the best food and head for it" to keep correct.
+    const dir = zooming
+      ? this.zoomDirection()
+      : (['up', 'down', 'left', 'right'] as Direction[]).find((d) => this.held[d]);
     if (!dir || !this.grid.canMove(this.husky.tile, dir)) return;
     this.husky.facing = dir;
     const to = this.grid.neighbor(this.husky.tile, dir);
     this.husky.tile = to;
-    ResourceSystem.applyMoveCost(this.husky.inv);
+    if (!zooming) ResourceSystem.applyMoveCost(this.husky.inv); // the chew is free while it lasts
     this.moving = true;
-    this.advanceEntity(this.huskySprite, to, this.step, () => {
+    this.advanceEntity(this.huskySprite, to, zooming ? this.step / config.ZOOM_SPEED_MULTIPLIER : this.step, () => {
       this.moving = false; this.onEnterTile(); this.tryStep();
     });
+  }
+
+  private zoomDirection(): Direction | undefined {
+    const food = bestFoodAnywhere(this.husky.tile, this.foods);
+    if (!food) { this.zoomSecondsLeft = 0; return undefined; } // map is bare: hand control back early
+    return bfsFirstStep(this.grid, this.husky.tile, (t) => t.col === food.tile.col && t.row === food.tile.row) ?? undefined;
   }
 
   // Chihuahua step: pathfind one tile toward the nearest treat and glide there,
@@ -247,6 +309,7 @@ export class GameScene extends Phaser.Scene {
       tile,
       owner: this.ownerRegistry.get(tile.ownerId),
       waterAdjacent: isWaterAdjacent(this.grid, this.chihuahua.tile),
+      rawhide: this.rawhideState(),
     };
   }
 
@@ -309,10 +372,13 @@ export class GameScene extends Phaser.Scene {
     if (this.over || this.chiMoving) return;
     const { relieveTargets, onTargetYard } = this.chiRelieveContext();
     if (this.banditController.shouldHold(this.banditInput(), onTargetYard)) return; // committed: hold position
-    const move = nextBanditMove(
-      this.grid, this.chihuahua, this.foods, Math.random,
-      this.banditController.currentGoal(), relieveTargets, this.banditController.committedYard(),
-    );
+    const move = nextBanditMove(this.grid, this.chihuahua, this.foods, Math.random, {
+      goal: this.banditController.currentGoal(),
+      relieveTargets,
+      committedOwnerId: this.banditController.committedYard(),
+      rawhideTile: this.rawhide?.tile ?? null,
+      blocked: this.banditBlocked(),
+    });
     if (!move) return;
     this.chihuahua.facing = move.dir;
     const to = this.grid.neighbor(this.chihuahua.tile, move.dir);
@@ -407,6 +473,13 @@ export class GameScene extends Phaser.Scene {
     this.updateBandit();
 
     // 6) sim-time / game-over. Dev mode freezes the clock and is invincible.
+    // Item drops and the milestone payout run every tick.
+    this.itemDropTick();
+    // Item countdowns run on their own second, independent of the round clock so
+    // they keep working in dev mode (the trap the gate fell into in #29).
+    this.itemTickInSecond = (this.itemTickInSecond + 1) % TICKS_PER_SECOND;
+    if (this.itemTickInSecond === 0) this.itemSecondTick();
+
     // Bandit works out the latch. The gate runs on its OWN clock, deliberately
     // outside the dev-mode freeze: dev mode stops the round timer, and nesting
     // the gate inside that would leave it shut for the whole session — killing
@@ -472,6 +545,7 @@ export class GameScene extends Phaser.Scene {
       this.foodSprites.delete(key);
     }
 
+    this.takeItemPickupAt(this.husky.tile); // Bandit's onChiEnterTile deliberately doesn't
     WorldActions.autoDump(this.husky, tile, this.ownerRegistry.get(tile.ownerId));
 
     if (this.fogOfWar) this.applyFov(); // Blizzard moved — recompute what he sees
@@ -533,6 +607,141 @@ export class GameScene extends Phaser.Scene {
 
   /** True while Bandit is still penned in the Grumbles' yard. */
   private gateShut(): boolean { return this.gateSprites.length > 0; }
+
+  // ---------------------------------------------------------------- items ---
+
+  /** Tiles Bandit refuses to enter right now. Blizzard is never passed this. */
+  private banditBlocked(): (t: TileCoord) => boolean {
+    return repellerBlocks(this.repellers, this.chihuahua.tile);
+  }
+
+  /** What the controller needs to know about a deployed rawhide, or null. */
+  private rawhideState(): { reachable: boolean; onIt: boolean } | null {
+    if (!this.rawhide) return null;
+    const t = this.rawhide.tile;
+    const onIt = this.chihuahua.tile.col === t.col && this.chihuahua.tile.row === t.row;
+    // Reachability comes from the same BFS that moves him, so he can never
+    // commit to a rawhide he cannot actually walk to (penned behind the gate,
+    // or fenced off by his own repeller aversion).
+    const reachable = onIt
+      || bfsFirstStep(this.grid, this.chihuahua.tile, (c) => c.col === t.col && c.row === t.row, this.banditBlocked()) !== null;
+    return { reachable, onIt };
+  }
+
+  private deployItem(type: ItemType) {
+    if (this.over || this.zoomSecondsLeft > 0) return; // no deploying mid-zoomies
+    if (!consume(this.items, type)) return;            // pressed a key for one he hasn't got
+    const tile = { ...this.husky.tile };
+    const p = this.grid.tileToPixel(tile);
+    if (type === 'rawhide') {
+      this.rawhide?.sprite.destroy();                  // only one at a time; the newest wins
+      this.rawhide = {
+        tile, secondsLeft: config.RAWHIDE_EAT_SECONDS,
+        sprite: this.add.image(p.x, p.y, 'rawhide').setDepth(8),
+      };
+    } else if (type === 'repeller') {
+      const radius = config.REPELLER_RADIUS * GRID.TILE;
+      const ring = this.add.graphics().setDepth(4);
+      ring.lineStyle(2, 0x7fbfe0, 0.8).strokeCircle(p.x, p.y, radius);
+      ring.fillStyle(0x7fbfe0, 0.08).fillCircle(p.x, p.y, radius);
+      this.repellers.push({
+        tile, secondsLeft: config.REPELLER_SECONDS,
+        sprite: this.add.image(p.x, p.y, 'repeller').setDepth(8),
+        ring,
+        label: this.add.text(p.x + 10, p.y - 18, `${config.REPELLER_SECONDS}`, { fontSize: '12px', color: '#eaf6ff' }).setDepth(9),
+      });
+    } else if (type === 'diaper') {
+      // Deliberately NOT via WorldActions: every path there deposits into the
+      // tile, and leaving the lawn clean is the whole point of the item.
+      this.husky.inv.poop = 0;
+      this.husky.inv.pee = 0;
+    } else {
+      this.zoomSecondsLeft = config.ZOOM_SECONDS;
+    }
+    audio.play('trick');
+  }
+
+  /** One second of item upkeep: countdowns, expiry, zoomies. */
+  private itemSecondTick() {
+    if (this.rawhide) {
+      // Only counts down while he is actually chewing it.
+      const onIt = this.rawhideState()?.onIt;
+      if (onIt && --this.rawhide.secondsLeft <= 0) {
+        this.rawhide.sprite.destroy();
+        this.rawhide = null;   // controller hands his interrupted mode back
+      }
+    }
+    const { alive, expired } = tickRepellers(this.repellers);
+    for (const r of expired) { r.sprite.destroy(); r.ring.destroy(); r.label.destroy(); }
+    for (const r of alive) r.label.setText(`${r.secondsLeft}`);
+    this.repellers = alive;
+    if (this.zoomSecondsLeft > 0) this.zoomSecondsLeft -= 1;
+  }
+
+  /** Random drops (scaled by held food) plus the 1000-food milestone grants. */
+  private itemDropTick() {
+    if (Math.random() < itemDropChance(this.husky.inv.food)) this.dropItemSomewhere();
+    // A single big pickup can vault more than one milestone, so this is a count.
+    const owed = milestonesToGrant(this.milestonesPaid, this.husky.inv.food);
+    for (let i = 0; i < owed; i++) {
+      this.milestonesPaid += 1;
+      this.giveItem(randomItemType(Math.random));
+    }
+  }
+
+  private dropItemSomewhere() {
+    const free = this.map.tiles.flat().filter((t) =>
+      t.type !== 'house' && t.type !== 'water' && !t.foodPresent
+      && !this.itemPickups.some((i) => i.tile.col === t.col && i.tile.row === t.row));
+    if (free.length === 0) return;
+    const tile = free[Math.floor(Math.random() * free.length)];
+    const type = randomItemType(Math.random);
+    const p = this.grid.tileToPixel(tile);
+    const sprite = this.add.image(p.x, p.y, type).setDepth(8);
+    if (this.fovSet && !this.fovSet.has(this.fkey(tile.col, tile.row))) sprite.setVisible(false);
+    this.itemPickups.push({ type, tile: { col: tile.col, row: tile.row }, sprite });
+  }
+
+  private giveItem(type: ItemType) {
+    grant(this.items, type);
+    audio.play('eat');
+    // First one of its kind this round earns a tutorial. Two grants can land in
+    // one frame (a pickup inside a tween, plus a milestone in the same tick), and
+    // launching the overlay twice would replace the first panel unseen — so they
+    // queue and are shown one at a time.
+    if (!this.seenItems.has(type) && !this.tutorialQueue.includes(type)) {
+      this.tutorialQueue.push(type);
+      this.showNextTutorial();
+    }
+  }
+
+  private showNextTutorial() {
+    if (this.over || this.tutorialShowing) return;
+    const type = nextTutorial(this.seenItems, this.tutorialQueue);
+    if (!type) { this.tutorialQueue = []; return; }
+    this.tutorialQueue = this.tutorialQueue.filter((t) => t !== type);
+    this.seenItems.add(type);
+    this.tutorialShowing = true;
+    this.scene.pause();
+    this.scene.pause('UI');
+    this.scene.launch('ItemInfo', {
+      type,
+      resume: () => {
+        this.tutorialShowing = false;
+        this.scene.resume();
+        this.scene.resume('UI');
+        this.showNextTutorial(); // anything else that landed in the same frame
+      },
+    });
+  }
+
+  private takeItemPickupAt(tile: TileCoord) {
+    const idx = this.itemPickups.findIndex((i) => i.tile.col === tile.col && i.tile.row === tile.row);
+    if (idx === -1) return;
+    const [picked] = this.itemPickups.splice(idx, 1);
+    picked.sprite.destroy();
+    this.giveItem(picked.type);
+  }
 
   private drawFences(tile: Tile) {
     const T = GRID.TILE;
