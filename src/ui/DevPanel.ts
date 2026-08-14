@@ -3,6 +3,14 @@ import {
   config, DEFAULTS, INIT_ONLY_KEYS, applyConfig, resetConfig, serializeConfig, parseConfig, type GameConfig,
 } from '../config/gameConfig';
 import { banditSettings, resetBanditSettings } from '../config/banditMode';
+import { ITEMS, ITEM_TYPES, type ItemType } from '../entities/Item';
+
+export interface DevPanelOpts {
+  onRestart?: () => void;
+  /** Hand Blizzard one of an item, so its behaviour can be exercised without
+   *  waiting on a random drop or a 1000-food milestone. */
+  onGrantItem?: (type: ItemType) => void;
+}
 
 const KEYS = Object.keys(DEFAULTS) as (keyof GameConfig)[];
 const PROFILES_KEY = 'husky-dev-profiles';
@@ -29,7 +37,7 @@ export class DevPanel {
   private banditToggle!: HTMLInputElement;
   private open = false;
 
-  constructor(private opts: { onRestart?: () => void } = {}) {
+  constructor(private opts: DevPanelOpts = {}) {
     this.root = document.createElement('div');
     // Docked to the window's left edge so it sits in the left letterbox strip
     // beside the map. Visible by default in dev mode; backtick toggles it.
@@ -64,7 +72,27 @@ export class DevPanel {
       this.button('Import .txt', () => this.importFile()),
       this.button('Save .txt', () => this.save()),
     );
-    this.root.append(resets, files, this.buildBanditToggle(), this.buildProfiles());
+    this.root.append(resets, files, this.buildItemGrants(), this.buildBanditToggle(), this.buildProfiles());
+  }
+
+  // Grant-an-item buttons. Built from ITEM_TYPES — the same table that drives
+  // the number keys, the HUD belt and the tutorial — so a fifth item would show
+  // up here on its own. Each routes through the production grant path, tutorial
+  // included, rather than poking the count directly: a shortcut here would mean
+  // the panel exercised something the real game never does.
+  private buildItemGrants(): HTMLDivElement {
+    const wrap = document.createElement('div');
+    applyStyle(wrap, { marginTop: '10px', borderTop: '1px solid #4a423a', paddingTop: '8px' });
+    const label = document.createElement('div');
+    label.textContent = 'GRANT ITEM';
+    applyStyle(label, { color: '#ffd27f', fontWeight: 'bold', marginBottom: '4px' });
+    wrap.append(label);
+    // Two per row so the labels stay legible in the narrow panel.
+    for (let i = 0; i < ITEM_TYPES.length; i += 2) {
+      wrap.append(this.buttonRow(...ITEM_TYPES.slice(i, i + 2).map((type) =>
+        this.button(`${ITEMS[type].key}  ${ITEMS[type].name}`, () => this.opts.onGrantItem?.(type)))));
+    }
+    return wrap;
   }
 
   // A live toggle for Bandit's AI mode. Its own labelled section (not folded
@@ -231,7 +259,7 @@ export class DevPanel {
 
 // Wire a dev panel to a scene: create it, toggle on backtick, tear it down when
 // the scene shuts down. Keeps the Phaser lifecycle glue out of the scene body.
-export function attachDevPanel(scene: Phaser.Scene, opts: { onRestart?: () => void } = {}): DevPanel {
+export function attachDevPanel(scene: Phaser.Scene, opts: DevPanelOpts = {}): DevPanel {
   const panel = new DevPanel(opts);
   scene.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.BACKTICK)
     .on('down', () => panel.toggle());

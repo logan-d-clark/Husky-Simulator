@@ -173,7 +173,12 @@ export class GameScene extends Phaser.Scene {
     if (this.fogOfWar) this.applyFov();
 
     // Dev mode: live config panel (backtick-toggled, self-teardown on shutdown).
-    if (this.devMode) attachDevPanel(this, { onRestart: () => this.restartGame() });
+    if (this.devMode) {
+      attachDevPanel(this, {
+        onRestart: () => this.restartGame(),
+        onGrantItem: (type) => this.giveItem(type), // the same path a real pickup takes
+      });
+    }
 
     // Phaser resets its keys on scene pause WITHOUT emitting keyup, and drops
     // any real keyup that arrives while paused. Both of this scene's input
