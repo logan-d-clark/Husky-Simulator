@@ -79,8 +79,12 @@ export class ItemInfoScene extends Phaser.Scene {
     const dismiss = () => {
       if (done) return;
       done = true;
-      this.info.resume();
+      // Tear THIS panel down before handing back, not after. `resume` may queue
+      // the next queued tutorial's launch, and Phaser processes scene ops in
+      // order — stopping afterwards would kill the panel that was just started,
+      // leaving the game paused with nothing on screen to un-pause it.
       this.scene.stop();
+      this.info.resume();
     };
 
     // You reach a pickup by WALKING onto it, so a direction key is held at the
