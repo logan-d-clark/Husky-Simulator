@@ -45,7 +45,12 @@ The backlog for this repo lives in [docs/backlog.md](../docs/backlog.md).
 
 ## Conventions
 
-- **Formatter**: Prettier (`npm run format` / `npm run format:check`)
+- **Formatter**: Prettier (`npm run format` / `npm run format:check`), configured
+  in `.prettierrc` (single quotes, 110 columns, LF). Line endings are pinned to
+  LF by `.gitattributes` — without that, Windows checkouts fail `format:check`
+  on every file.
+- **Blame**: run this once per clone so the repo-wide reformat does not sit on
+  top of every line — `git config blame.ignoreRevsFile .git-blame-ignore-revs`
 - **Linter**: oxlint (`npm run lint` / `npm run lint:fix`)
 - **Type checking**: `tsc --noEmit` (runs as part of `npm run build`)
 - Source lives in `src/`, tests in `tests/` (`tests/**/*.test.ts`).

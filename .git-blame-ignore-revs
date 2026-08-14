@@ -1,0 +1,9 @@
+# Commits that only reformat. `git blame` should look straight through these to
+# whoever actually wrote the line.
+#
+# This file is INERT until you tell git about it, once per clone:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+# (GitHub's blame view honours it automatically.)
+
+# style: apply Prettier across the repo — 74 files, whitespace only
+c4832d6c83214ac5f3341d25697996cc6d32dab9
