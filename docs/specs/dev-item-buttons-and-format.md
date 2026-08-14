@@ -33,9 +33,9 @@ diagnosis is that it was never configured, not that the code drifted.
 
 ### What's actually wrong
 
-| Cause | Effect |
-| --- | --- |
-| No `.prettierrc` at all | Prettier runs on defaults: 80 columns, double quotes — against a codebase written at ~110 columns with single quotes, so **every line of every file** is "wrong" |
+| Cause                                     | Effect                                                                                                                                                                                                                 |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| No `.prettierrc` at all                   | Prettier runs on defaults: 80 columns, double quotes — against a codebase written at ~110 columns with single quotes, so **every line of every file** is "wrong"                                                       |
 | No `.gitattributes`, `core.autocrlf=true` | Files land on disk as CRLF while Prettier's default `endOfLine: "lf"` expects LF, so ~20 files fail on line endings alone. This is also the `LF will be replaced by CRLF` warning printed on every commit this session |
 
 93 files fail today. With a config that matches the code as actually written,
@@ -111,9 +111,9 @@ Scenario: blame survives the reflow
 
 ## Ambiguity log
 
-| Question | Resolution | Source |
-| --- | --- | --- |
-| Adopt Prettier or retire it? | Adopt: configure, then reformat | user, 2026-08-13 |
-| Do panel grants fire the tutorial? | Yes — same path as a real pickup | user, 2026-08-13 |
-| `endOfLine: auto` or `lf` + `.gitattributes`? | `lf` + `.gitattributes`; `auto` depends on the checkout and would differ between CI and a Windows dev box | derived |
-| Separate commit for the reflow? | Yes, plus `.git-blame-ignore-revs` | assumed |
+| Question                                      | Resolution                                                                                                | Source           |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ---------------- |
+| Adopt Prettier or retire it?                  | Adopt: configure, then reformat                                                                           | user, 2026-08-13 |
+| Do panel grants fire the tutorial?            | Yes — same path as a real pickup                                                                          | user, 2026-08-13 |
+| `endOfLine: auto` or `lf` + `.gitattributes`? | `lf` + `.gitattributes`; `auto` depends on the checkout and would differ between CI and a Windows dev box | derived          |
+| Separate commit for the reflow?               | Yes, plus `.git-blame-ignore-revs`                                                                        | assumed          |

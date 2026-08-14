@@ -12,12 +12,12 @@ with deep AI coupling and deserves its own review.
 
 A fourth `FoodType`, spawning only on a maxed-affection lawn and rarer than bags.
 
-| Knob | Value | Note |
-| --- | --- | --- |
-| `PUPCUP_MULTIPLIER` | 12 | value 120 vs. a bag's 40 — a massive boost |
-| `PUPCUP_LIKELIHOOD` | 0.05 | same as a bag — the 100-affection gate is the scarcity |
-| `PUPCUP_THRESHOLD` | 100 | maxed affection only |
-| `SMELL_PUPCUP` | 14 | Bandit smells it from further than a bag (12) |
+| Knob                | Value | Note                                                   |
+| ------------------- | ----- | ------------------------------------------------------ |
+| `PUPCUP_MULTIPLIER` | 12    | value 120 vs. a bag's 40 — a massive boost             |
+| `PUPCUP_LIKELIHOOD` | 0.05  | same as a bag — the 100-affection gate is the scarcity |
+| `PUPCUP_THRESHOLD`  | 100   | maxed affection only                                   |
+| `SMELL_PUPCUP`      | 14    | Bandit smells it from further than a bag (12)          |
 
 **The threshold needs `>=`, not `>`.** `AffectionSystem.applyAction` caps affection
 at exactly 100, so the existing `owner.affection > THRESHOLD` test can never fire
@@ -27,7 +27,7 @@ they spawn); pup cup uses `>=` with a comment explaining the asymmetry.
 **Pup cups are additive, not a replacement for bags.** `rollDispense` resolves
 one random draw down a chain of ascending bands, so folding a pup cup branch in
 at the same 0.05 likelihood as a bag would consume the bag's entire band —
-maxing a yard would silently *stop* it producing bags. Instead the pup cup gets
+maxing a yard would silently _stop_ it producing bags. Instead the pup cup gets
 its own independent roll ahead of the existing chain:
 
 ```
@@ -35,7 +35,7 @@ if (affection >= PUPCUP_THRESHOLD && rand() <= PUPCUP_LIKELIHOOD * p) -> pup cup
 ...otherwise the existing treat/bowl/bag chain, byte-for-byte unchanged
 ```
 
-So a perfect yard yields pup cups *on top of* everything it already produced,
+So a perfect yard yields pup cups _on top of_ everything it already produced,
 and every yard below 100 behaves exactly as it does today.
 
 New asset `pupcup.svg`, authored to match the existing flat-SVG food sprites.
@@ -102,11 +102,11 @@ tiles render with the vertical fence sprite in a distinct gate tint while shut.
 Following the existing `chiSpeedMultiplier` idiom rather than inventing a second
 pattern: one dev-tunable base with a per-difficulty multiplier.
 
-| | Multiplier | Delay at the 120s default |
-| --- | --- | --- |
-| Puppy | 1.5 | 180s |
-| Husky | 1.0 | 120s |
-| Blizzlord | 0.5 | 60s |
+|           | Multiplier | Delay at the 120s default |
+| --------- | ---------- | ------------------------- |
+| Puppy     | 1.5        | 180s                      |
+| Husky     | 1.0        | 120s                      |
+| Blizzlord | 0.5        | 60s                       |
 
 `BANDIT_DELAY_SECONDS` (120) is the dev-panel knob;
 `DifficultySettings.banditDelayMultiplier` scales it.
@@ -179,17 +179,17 @@ Scenario: he is looked after at home
 
 ## Ambiguity log
 
-| Question | Resolution | Source |
-| --- | --- | --- |
-| Deliver all 7 features at once? | No — two PRs; items are PR 2 | user, 2026-08-10 |
-| Where is the gate? | The two-tile driveway on the right edge, verified by flood fill | user correction, 2026-08-10 |
-| New sprites | Authored in-style as SVG | user, 2026-08-10 |
-| Pup cup rarity | As common as a bag; the 100-affection gate is the scarcity | user, 2026-08-10 |
-| Pup cup value | 12× a treat | assumed |
-| Does a pup cup displace a bag? | No — independent roll, so maxed yards gain pup cups and keep bags | derived from the ordering constraint |
-| Threshold comparison at 100 | `>=` for pup cup only; bowl/bag keep `>` | derived — affection caps at 100 |
-| Bandit's needs while penned | Suspended — he is at home being cared for | user, 2026-08-10 |
-| Gate visual | Existing fence sprite, distinct tint | assumed |
+| Question                        | Resolution                                                        | Source                               |
+| ------------------------------- | ----------------------------------------------------------------- | ------------------------------------ |
+| Deliver all 7 features at once? | No — two PRs; items are PR 2                                      | user, 2026-08-10                     |
+| Where is the gate?              | The two-tile driveway on the right edge, verified by flood fill   | user correction, 2026-08-10          |
+| New sprites                     | Authored in-style as SVG                                          | user, 2026-08-10                     |
+| Pup cup rarity                  | As common as a bag; the 100-affection gate is the scarcity        | user, 2026-08-10                     |
+| Pup cup value                   | 12× a treat                                                       | assumed                              |
+| Does a pup cup displace a bag?  | No — independent roll, so maxed yards gain pup cups and keep bags | derived from the ordering constraint |
+| Threshold comparison at 100     | `>=` for pup cup only; bowl/bag keep `>`                          | derived — affection caps at 100      |
+| Bandit's needs while penned     | Suspended — he is at home being cared for                         | user, 2026-08-10                     |
+| Gate visual                     | Existing fence sprite, distinct tint                              | assumed                              |
 
 ## Deferred to PR 2
 

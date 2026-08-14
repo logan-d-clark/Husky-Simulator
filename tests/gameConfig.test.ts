@@ -1,5 +1,13 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { config, DEFAULTS, INIT_ONLY_KEYS, resetConfig, applyConfig, serializeConfig, parseConfig } from '../src/config/gameConfig';
+import {
+  config,
+  DEFAULTS,
+  INIT_ONLY_KEYS,
+  resetConfig,
+  applyConfig,
+  serializeConfig,
+  parseConfig,
+} from '../src/config/gameConfig';
 
 afterEach(() => resetConfig());
 

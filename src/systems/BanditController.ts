@@ -8,8 +8,8 @@ import { needsRelieve, isThirsty, canFoulTile, type BanditGoal, type WasteChanne
 
 export interface BanditTickInput {
   inv: Inventory;
-  tile: Tile;            // the tile Bandit is standing on
-  owner: Owner;          // that tile's owner (for affection on a foul)
+  tile: Tile; // the tile Bandit is standing on
+  owner: Owner; // that tile's owner (for affection on a foul)
   waterAdjacent: boolean; // is Bandit next to a water tile?
   /** A deployed rawhide, when one exists. `reachable` is decided by the same
    *  BFS that moves him, so targeting and movement can't disagree. */
@@ -54,15 +54,21 @@ export class BanditController {
 
   /** Bandit's current behaviour mode — GameScene reads this to route his
    *  movement and to label his HUD block. */
-  currentGoal(): BanditGoal { return this.goal; }
+  currentGoal(): BanditGoal {
+    return this.goal;
+  }
 
   /** The waste channel he is draining right now, or null when not relieving.
    *  Drives both his tile targeting and his HUD label. */
-  activeChannel(): WasteChannel | null { return this.drainQueue[0] ?? null; }
+  activeChannel(): WasteChannel | null {
+    return this.drainQueue[0] ?? null;
+  }
 
   /** The yard this relief episode is committed to, or null when not in relief
    *  (or not yet arrived at one). */
-  committedYard(): number | null { return this.yardOwnerId; }
+  committedYard(): number | null {
+    return this.yardOwnerId;
+  }
 
   /** Record the yard the AI settled on for this episode. Ignored outside relief
    *  so a stale commitment can't leak into the next one. */
@@ -153,8 +159,10 @@ export class BanditController {
   private updateGoal(inv: Inventory): void {
     if (this.goal === 'rawhide') return; // handled by updateRawhide
     if (this.goal === 'treat') {
-      if (needsRelieve(inv)) { this.goal = 'relief'; this.drainQueue = this.fullChannels(inv); }
-      else if (isThirsty(inv)) this.goal = 'water';
+      if (needsRelieve(inv)) {
+        this.goal = 'relief';
+        this.drainQueue = this.fullChannels(inv);
+      } else if (isThirsty(inv)) this.goal = 'water';
       return;
     }
     if (this.goal === 'relief') this.advanceQueue(inv);
@@ -168,7 +176,8 @@ export class BanditController {
   // than fouling whatever grass is under his feet.
   shouldHold(input: BanditTickInput, onTargetYard: boolean): boolean {
     if (this.goal === 'rawhide') return !!input.rawhide?.onIt; // chewing: he doesn't budge
-    if (this.goal === 'relief') return onTargetYard && canFoulTile(input.inv, input.tile, this.activeChannel());
+    if (this.goal === 'relief')
+      return onTargetYard && canFoulTile(input.inv, input.tile, this.activeChannel());
     if (this.goal === 'water') return input.waterAdjacent && input.inv.water < config.WATER_CAP;
     return false;
   }

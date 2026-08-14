@@ -22,31 +22,31 @@ export interface GameConfig {
   CLEAN_RATE: number;
   CLEAN_COST: number;
   TRICK_RATE: number;
-  TRICK_FOOD_COST: number;  // food spent per trick — 0 so building affection costs no score
+  TRICK_FOOD_COST: number; // food spent per trick — 0 so building affection costs no score
   TRICK_WATER_COST: number; // water spent per trick — the real price, paid in pond trips
-  WARN_FOOD_LOW: number;    // warn (and redden the HUD) at or below this food
-  WARN_WATER_LOW: number;   // warn at or below this water
-  WARN_PEE_HIGH: number;    // warn at or above this pee
-  MUSIC_VOLUME: number;     // 0..1 gain for the background music bed
-  SFX_VOLUME: number;       // 0..1 gain for cues
-  RAWHIDE_EAT_SECONDS: number;   // how long Bandit is pinned once he reaches one
-  REPELLER_RADIUS: number;       // tiles Bandit will not enter around a repeller
+  WARN_FOOD_LOW: number; // warn (and redden the HUD) at or below this food
+  WARN_WATER_LOW: number; // warn at or below this water
+  WARN_PEE_HIGH: number; // warn at or above this pee
+  MUSIC_VOLUME: number; // 0..1 gain for the background music bed
+  SFX_VOLUME: number; // 0..1 gain for cues
+  RAWHIDE_EAT_SECONDS: number; // how long Bandit is pinned once he reaches one
+  REPELLER_RADIUS: number; // tiles Bandit will not enter around a repeller
   REPELLER_SECONDS: number;
-  ZOOM_SECONDS: number;          // zoomies duration
+  ZOOM_SECONDS: number; // zoomies duration
   ZOOM_SPEED_MULTIPLIER: number; // Blizzard's speed while zooming
-  ITEM_DROP_PER_TICK: number;    // base per-tick chance an item drops
-  ITEM_DROP_FOOD_SCALE: number;  // food held per doubling of that chance
-  ITEM_MILESTONE_FOOD: number;   // free item each time this much food is reached
+  ITEM_DROP_PER_TICK: number; // base per-tick chance an item drops
+  ITEM_DROP_FOOD_SCALE: number; // food held per doubling of that chance
+  ITEM_MILESTONE_FOOD: number; // free item each time this much food is reached
   BOWL_LIKELIHOOD: number;
   BAG_LIKELIHOOD: number;
   BOWL_MULTIPLIER: number;
   BAG_MULTIPLIER: number;
   BOWL_THRESHOLD: number;
   BAG_THRESHOLD: number;
-  PUPCUP_MULTIPLIER: number;  // the ultimate food — a maxed-affection reward
+  PUPCUP_MULTIPLIER: number; // the ultimate food — a maxed-affection reward
   PUPCUP_LIKELIHOOD: number;
-  PUPCUP_THRESHOLD: number;   // affection needed; compared with >=, see rollDispense
-  SMELL_PUPCUP: number;       // Bandit smells it from further than anything else
+  PUPCUP_THRESHOLD: number; // affection needed; compared with >=, see rollDispense
+  SMELL_PUPCUP: number; // Bandit smells it from further than anything else
   START_FOOD: number;
   START_WATER: number;
   HEAT_PAVEMENT: number;
@@ -56,9 +56,9 @@ export interface GameConfig {
   SMELL_BOWL: number;
   SMELL_BAG: number;
   PATROL_SPEED_MULTIPLIER: number; // Bandit's per-tile duration x this while patrolling (2 = half speed)
-  BANDIT_DELAY_SECONDS: number;     // base time Bandit stays penned; scaled per difficulty
+  BANDIT_DELAY_SECONDS: number; // base time Bandit stays penned; scaled per difficulty
   BANDIT_RELIEVE_THRESHOLD: number; // poop/pee level that sends Bandit to a yard to relieve (default: full)
-  BANDIT_THIRST_FRACTION: number;   // fraction of WATER_CAP at or below which Bandit goes for water
+  BANDIT_THIRST_FRACTION: number; // fraction of WATER_CAP at or below which Bandit goes for water
 }
 
 // Frozen baseline — every value verbatim from the original constants.
@@ -106,7 +106,7 @@ export const DEFAULTS: Readonly<GameConfig> = Object.freeze({
   BAG_MULTIPLIER: 4,
   BOWL_THRESHOLD: 50,
   BAG_THRESHOLD: 90,
-  PUPCUP_MULTIPLIER: 12,   // 120 food vs a bag's 40
+  PUPCUP_MULTIPLIER: 12, // 120 food vs a bag's 40
   PUPCUP_LIKELIHOOD: 0.05, // as likely as a bag; the 100-affection gate is the scarcity
   PUPCUP_THRESHOLD: 100,
   SMELL_PUPCUP: 14,
@@ -134,7 +134,12 @@ export const INIT_ONLY_KEYS: ReadonlySet<keyof GameConfig> = new Set<keyof GameC
   // BANDIT_DELAY_SECONDS is read once into the gate clock in GameScene.create,
   // exactly like GAME_SECONDS seeds the round clock — without this the dev panel
   // would advertise it as live and silently ignore a mid-round edit.
-  'HEAT_GRASS', 'HEAT_PAVEMENT', 'GAME_SECONDS', 'START_FOOD', 'START_WATER', 'BANDIT_DELAY_SECONDS',
+  'HEAT_GRASS',
+  'HEAT_PAVEMENT',
+  'GAME_SECONDS',
+  'START_FOOD',
+  'START_WATER',
+  'BANDIT_DELAY_SECONDS',
 ]);
 
 /** Restore every field to its DEFAULTS value (mutates in place). */
@@ -150,9 +155,7 @@ export function applyConfig(patch: Partial<GameConfig>): void {
 /** Serialize a config to plain `KEY=value` text — the format the dev panel
  *  downloads for snapshotting a tuned config. */
 export function serializeConfig(c: GameConfig = config): string {
-  return (Object.keys(c) as (keyof GameConfig)[])
-    .map((k) => `${k}=${c[k]}`)
-    .join('\n') + '\n';
+  return (Object.keys(c) as (keyof GameConfig)[]).map((k) => `${k}=${c[k]}`).join('\n') + '\n';
 }
 
 /** Parse `KEY=value` text (as produced by serializeConfig) into a partial patch,

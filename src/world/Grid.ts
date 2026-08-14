@@ -4,8 +4,10 @@ import type { Direction, TileCoord } from '../types';
 import { GRID } from '../config/constants';
 
 const DELTA: Record<Direction, { dc: number; dr: number }> = {
-  up: { dc: 0, dr: -1 }, down: { dc: 0, dr: 1 },
-  left: { dc: -1, dr: 0 }, right: { dc: 1, dr: 0 },
+  up: { dc: 0, dr: -1 },
+  down: { dc: 0, dr: 1 },
+  left: { dc: -1, dr: 0 },
+  right: { dc: 1, dr: 0 },
 };
 
 export class Grid {

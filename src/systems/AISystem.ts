@@ -22,8 +22,7 @@ export function canFoulTile(inv: Inventory, tile: Tile, channel: WasteChannel | 
 
 const DIRS: Direction[] = ['up', 'down', 'left', 'right'];
 const key = (c: number, r: number): string => `${c},${r}`;
-const manhattan = (a: TileCoord, b: TileCoord): number =>
-  Math.abs(a.col - b.col) + Math.abs(a.row - b.row);
+const manhattan = (a: TileCoord, b: TileCoord): number => Math.abs(a.col - b.col) + Math.abs(a.row - b.row);
 
 export interface Bandit {
   tile: TileCoord;
@@ -47,7 +46,10 @@ function bestFood(from: TileCoord, foods: Food[], smellGated: boolean): Food | n
     const d = manhattan(from, f.tile);
     if (smellGated && d > smellRadius(f.type)) continue;
     const score = f.value / (d + 1);
-    if (score > bestScore) { bestScore = score; best = f; }
+    if (score > bestScore) {
+      bestScore = score;
+      best = f;
+    }
   }
   return best;
 }
@@ -71,7 +73,13 @@ export function isThirsty(inv: Inventory): boolean {
 }
 
 function isWaterAdjacent(grid: Grid, t: TileCoord): boolean {
-  for (const [dc, dr] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+  for (const [dc, dr] of [
+    [0, 0],
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+  ] as const) {
     if (grid.tileAt(t.col + dc, t.row + dr)?.type === 'water') return true;
   }
   return false;
@@ -85,7 +93,9 @@ function isWaterAdjacent(grid: Grid, t: TileCoord): boolean {
 // this is why the repeller can't live in Grid.canMove the way the gate does,
 // since canMove is shared by both dogs and the whole point here is asymmetry.
 export function bfsFirstStep(
-  grid: Grid, from: TileCoord, isGoal: (t: TileCoord) => boolean,
+  grid: Grid,
+  from: TileCoord,
+  isGoal: (t: TileCoord) => boolean,
   blocked: (t: TileCoord) => boolean = () => false,
 ): Direction | null {
   const visited = new Set<string>([key(from.col, from.row)]);
@@ -108,7 +118,7 @@ export function bfsFirstStep(
 
 const OPPOSITE: Record<Direction, Direction> = { up: 'down', down: 'up', left: 'right', right: 'left' };
 const YARD_EXPLORE_CHANCE = 0.15; // chance to dip off the street into a yard
-const CONTINUE_CHANCE = 0.8;      // chance to keep heading straight down the street
+const CONTINUE_CHANCE = 0.8; // chance to keep heading straight down the street
 
 const pick = (dirs: Direction[], rng: () => number): Direction => dirs[Math.floor(rng() * dirs.length)];
 
@@ -118,7 +128,10 @@ const pick = (dirs: Direction[], rng: () => number): Direction => dirs[Math.floo
 // biases straight back toward the street. Stateless: the "return to street"
 // emerges from a strong pavement preference, so no history is stored on Bandit.
 export function patrolStep(
-  grid: Grid, from: TileCoord, facing: Direction, rng: () => number,
+  grid: Grid,
+  from: TileCoord,
+  facing: Direction,
+  rng: () => number,
   blocked: (t: TileCoord) => boolean = () => false,
 ): Direction | null {
   // Wandering must respect the repeller too, or he'd stroll into a zone his
@@ -148,12 +161,19 @@ export function patrolStep(
 }
 
 export type BanditMode = 'chase' | 'patrol';
-export interface BanditMove { dir: Direction; mode: BanditMode; }
+export interface BanditMove {
+  dir: Direction;
+  mode: BanditMode;
+}
 
 // A family yard Bandit can foul to relieve himself, tagged with its owner (so a
 // relief episode can commit to one yard) and that owner's current affection (so
 // he picks the most-liked one to begin with).
-export interface RelieveTarget { tile: TileCoord; ownerId: number; affection: number; }
+export interface RelieveTarget {
+  tile: TileCoord;
+  ownerId: number;
+  affection: number;
+}
 
 // Bandit's three mutually-exclusive behaviour modes. He stays in whichever one
 // he entered until its exit condition fires — no mode preempts another, which is
@@ -199,10 +219,15 @@ export function needsRelieve(inv: Inventory): boolean {
 // consulted again solely when the yard has no reachable room left (it saturated),
 // which is how the episode hands off to the next-best yard. Pure.
 export function firstReachableRelieveTarget(
-  grid: Grid, from: TileCoord, relieveTargets: RelieveTarget[], committedOwnerId: number | null = null,
+  grid: Grid,
+  from: TileCoord,
+  relieveTargets: RelieveTarget[],
+  committedOwnerId: number | null = null,
   blocked: (t: TileCoord) => boolean = () => false,
 ): { tile: TileCoord; ownerId: number; dir: Direction | null } | null {
-  const stepTo = (target: RelieveTarget): { tile: TileCoord; ownerId: number; dir: Direction | null } | null => {
+  const stepTo = (
+    target: RelieveTarget,
+  ): { tile: TileCoord; ownerId: number; dir: Direction | null } | null => {
     // The tile under his paws is a hit with no step to take. bfsFirstStep can
     // never return it (its seed node carries no first direction), so without
     // this case the last foulable tile of a committed yard reads as unreachable
@@ -210,11 +235,19 @@ export function firstReachableRelieveTarget(
     if (target.tile.col === from.col && target.tile.row === from.row) {
       return { tile: target.tile, ownerId: target.ownerId, dir: null };
     }
-    const dir = bfsFirstStep(grid, from, (t) => t.col === target.tile.col && t.row === target.tile.row, blocked);
+    const dir = bfsFirstStep(
+      grid,
+      from,
+      (t) => t.col === target.tile.col && t.row === target.tile.row,
+      blocked,
+    );
     return dir ? { tile: target.tile, ownerId: target.ownerId, dir } : null;
   };
   if (committedOwnerId !== null) {
-    for (const target of rankRelieveTargets(from, relieveTargets.filter((t) => t.ownerId === committedOwnerId))) {
+    for (const target of rankRelieveTargets(
+      from,
+      relieveTargets.filter((t) => t.ownerId === committedOwnerId),
+    )) {
       const hit = stepTo(target);
       if (hit) return hit;
     }
@@ -245,7 +278,11 @@ export interface BanditMoveContext {
 }
 
 export function nextBanditMove(
-  grid: Grid, bandit: Bandit, foods: Food[], rng: () => number, ctx: BanditMoveContext = {},
+  grid: Grid,
+  bandit: Bandit,
+  foods: Food[],
+  rng: () => number,
+  ctx: BanditMoveContext = {},
 ): BanditMove | null {
   const goal = ctx.goal ?? 'treat';
   const blocked = ctx.blocked ?? (() => false);
@@ -258,7 +295,13 @@ export function nextBanditMove(
     if (bandit.tile.col === t.col && bandit.tile.row === t.row) return null; // arrived; settle in
   }
   if (goal === 'relief') {
-    const target = firstReachableRelieveTarget(grid, bandit.tile, ctx.relieveTargets ?? [], ctx.committedOwnerId ?? null, blocked);
+    const target = firstReachableRelieveTarget(
+      grid,
+      bandit.tile,
+      ctx.relieveTargets ?? [],
+      ctx.committedOwnerId ?? null,
+      blocked,
+    );
     if (target) return target.dir ? { dir: target.dir, mode: 'chase' } : null; // null dir: already on it, stay
   }
   if (goal === 'water') {

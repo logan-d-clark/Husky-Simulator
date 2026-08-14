@@ -1,7 +1,11 @@
 import type { FoodType, TileCoord } from '../types';
 import { config } from '../config/gameConfig';
 
-export interface Food { type: FoodType; value: number; tile: TileCoord; }
+export interface Food {
+  type: FoodType;
+  value: number;
+  tile: TileCoord;
+}
 
 export function foodValue(type: FoodType): number {
   if (type === 'pupcup') return config.PUPCUP_MULTIPLIER * config.TREAT_VALUE;

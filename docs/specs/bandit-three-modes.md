@@ -13,11 +13,11 @@ mutually exclusive modes and show the player which one he's in.
 ### Root cause of the reported bug
 
 `rankRelieveTargets` re-ranks candidate yards by **live** affection on every
-tick, and each foul *lowers* that owner's affection (`AffectionSystem.applyAction`).
+tick, and each foul _lowers_ that owner's affection (`AffectionSystem.applyAction`).
 So after one poop+pee the yard he's on is no longer the most-liked, the ranking
 flips to a different owner, and he walks off with 95% of his load still held.
 Two secondary causes compound it: relief triggers at `BANDIT_RELIEVE_THRESHOLD = 30`
-(not full), and the episode ends only when *both* channels reach ~0, so he
+(not full), and the episode ends only when _both_ channels reach ~0, so he
 oscillates near the threshold.
 
 Fix: commit to one **owner** for the whole relief episode, not re-derive it each tick.
@@ -26,11 +26,11 @@ Fix: commit to one **owner** for the whole relief episode, not re-derive it each
 
 ### Modes
 
-| Mode | Enter when | Exit when |
-| --- | --- | --- |
-| `treat` (default) | — | — |
-| `relief` | `poop >= POOP_MAX` **or** `pee >= PEE_MAX` | every channel that was full is drained to empty |
-| `water` | `water <= WATER_CAP * 0.1` | `water >= WATER_CAP` |
+| Mode              | Enter when                                 | Exit when                                       |
+| ----------------- | ------------------------------------------ | ----------------------------------------------- |
+| `treat` (default) | —                                          | —                                               |
+| `relief`          | `poop >= POOP_MAX` **or** `pee >= PEE_MAX` | every channel that was full is drained to empty |
+| `water`           | `water <= WATER_CAP * 0.1`                 | `water >= WATER_CAP`                            |
 
 Modes are mutually exclusive and **committed**: once entered, Bandit stays in
 that mode until its exit condition fires. Nothing preempts a mode in progress.
@@ -39,13 +39,15 @@ that mode until its exit condition fires. Nothing preempts a mode in progress.
 trigger on the same tick he empties out first, then drinks.
 
 ### `treat` mode
+
 Unchanged — today's value/distance food seeking (smell-gated in advanced mode,
 map-wide when omniscient), falling back to the street patrol.
 
 ### `relief` mode
+
 1. On entry, pick the **highest-affection reachable yard** with a foulable tile
    and commit to that owner id.
-2. Path to the nearest foulable tile *of that yard*; foul it; when it fills,
+2. Path to the nearest foulable tile _of that yard_; foul it; when it fills,
    move to the next foulable tile in the same yard.
 3. Drain **both** poop and pee to empty if both were full on entry; drain only
    the triggering channel if only one was.
@@ -54,19 +56,21 @@ map-wide when omniscient), falling back to the street patrol.
 5. When empty, return to `treat`.
 
 ### `water` mode
+
 Beeline to the nearest water by BFS — **no opportunistic treat grabs en route**
 (`nearestFoodWithin` / `BANDIT_GRAB_RADIUS` drop out of the water path). Drink
 each tick until `water >= WATER_CAP`, then return to `treat`.
 
 ### HUD
+
 A fifth line in Bandit's stat card showing his current mode:
 
-| Mode | Label |
-| --- | --- |
-| `treat` | `Looking for Treats` |
-| `water` | `Needs Water!` |
-| `relief`, draining poop | `Need to Poop!` |
-| `relief`, draining pee | `Need to Pee!` |
+| Mode                    | Label                |
+| ----------------------- | -------------------- |
+| `treat`                 | `Looking for Treats` |
+| `water`                 | `Needs Water!`       |
+| `relief`, draining poop | `Need to Poop!`      |
+| `relief`, draining pee  | `Need to Pee!`       |
 
 When both channels are full, the label follows whichever he is draining now
 (poop first, then pee).
@@ -147,10 +151,10 @@ Scenario: the HUD names his mode
 
 ## Ambiguity log
 
-| Question | Resolution | Source |
-| --- | --- | --- |
-| Relief vs. water when both trigger | Relief first | user, 2026-08-08 |
-| Both channels full on entry | Empty both in one trip | user, 2026-08-08 |
-| Committed yard saturates mid-episode | Move to next-best yard with room | user, 2026-08-08 |
-| Keep the tunable relief threshold? | Yes — retune to 100 rather than delete the knob | assumed |
+| Question                              | Resolution                                              | Source                     |
+| ------------------------------------- | ------------------------------------------------------- | -------------------------- |
+| Relief vs. water when both trigger    | Relief first                                            | user, 2026-08-08           |
+| Both channels full on entry           | Empty both in one trip                                  | user, 2026-08-08           |
+| Committed yard saturates mid-episode  | Move to next-best yard with room                        | user, 2026-08-08           |
+| Keep the tunable relief threshold?    | Yes — retune to 100 rather than delete the knob         | assumed                    |
 | Bandit's survival margin at 10% water | Bandit has no death condition, so a thin margin is safe | verified in `updateBandit` |

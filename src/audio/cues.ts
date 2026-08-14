@@ -10,23 +10,36 @@ import { midiToFreq, type ToneStep, type Wave } from './tones';
 // don't resemble either, because a warning you mistake for a reward is useless.
 
 export type CueName =
-  | 'eat' | 'drink' | 'pee' | 'poop' | 'trick'
-  | 'banditTreat' | 'banditRelief' | 'banditWater' | 'banditRawhide'
-  | 'warnFood' | 'warnWater' | 'warnPee';
+  | 'eat'
+  | 'drink'
+  | 'pee'
+  | 'poop'
+  | 'trick'
+  | 'banditTreat'
+  | 'banditRelief'
+  | 'banditWater'
+  | 'banditRawhide'
+  | 'warnFood'
+  | 'warnWater'
+  | 'warnPee';
 
-const step = (midi: number, dur: number, wave: Wave, gain: number): ToneStep =>
-  ({ freq: midiToFreq(midi), dur, wave, gain });
+const step = (midi: number, dur: number, wave: Wave, gain: number): ToneStep => ({
+  freq: midiToFreq(midi),
+  dur,
+  wave,
+  gain,
+});
 
 export const CUES: Record<CueName, ToneStep[]> = {
   // --- Blizzard: bright, rising, short ---------------------------------------
-  eat:   [step(76, 0.06, 'square', 0.5), step(83, 0.09, 'square', 0.45)],
-  drink: [step(67, 0.07, 'sine', 0.5), step(60, 0.10, 'sine', 0.42)],   // a gulp: falls
-  pee:   [step(72, 0.05, 'triangle', 0.32), step(65, 0.16, 'triangle', 0.28)],
-  poop:  [step(48, 0.07, 'square', 0.34), step(43, 0.10, 'square', 0.30)], // low double thud
+  eat: [step(76, 0.06, 'square', 0.5), step(83, 0.09, 'square', 0.45)],
+  drink: [step(67, 0.07, 'sine', 0.5), step(60, 0.1, 'sine', 0.42)], // a gulp: falls
+  pee: [step(72, 0.05, 'triangle', 0.32), step(65, 0.16, 'triangle', 0.28)],
+  poop: [step(48, 0.07, 'square', 0.34), step(43, 0.1, 'square', 0.3)], // low double thud
   trick: [step(72, 0.06, 'square', 0.5), step(76, 0.06, 'square', 0.5), step(83, 0.14, 'square', 0.46)],
 
   // --- Bandit: lower, quieter, duller ----------------------------------------
-  banditTreat:  [step(57, 0.08, 'triangle', 0.24), step(59, 0.10, 'triangle', 0.22)],
+  banditTreat: [step(57, 0.08, 'triangle', 0.24), step(59, 0.1, 'triangle', 0.22)],
   // The "oh crap" cue: he has just committed to fouling your best yard, and the
   // player has a window to respond. Deliberately the LONGEST cue in the game —
   // it earns its weight from length, low register and a tritone against the
@@ -34,19 +47,23 @@ export const CUES: Record<CueName, ToneStep[]> = {
   // under Blizzard's cues: this is a warning, not a reward, and it must not
   // mask the player's own feedback.
   banditRelief: [
-    step(50, 0.16, 'sawtooth', 0.24),  // D3
-    step(44, 0.16, 'sawtooth', 0.24),  // G#2 — tritone below, the sour step
-    step(38, 0.22, 'sawtooth', 0.22),  // D2
-    step(32, 0.30, 'sawtooth', 0.20),  // G#1 — sinks out of the mix
+    step(50, 0.16, 'sawtooth', 0.24), // D3
+    step(44, 0.16, 'sawtooth', 0.24), // G#2 — tritone below, the sour step
+    step(38, 0.22, 'sawtooth', 0.22), // D2
+    step(32, 0.3, 'sawtooth', 0.2), // G#1 — sinks out of the mix
   ],
-  banditWater:  [step(55, 0.07, 'sine', 0.24), step(62, 0.09, 'sine', 0.20)],
+  banditWater: [step(55, 0.07, 'sine', 0.24), step(62, 0.09, 'sine', 0.2)],
   // He took the bait — the one Bandit cue that is good news, so it rises.
-  banditRawhide: [step(52, 0.08, 'triangle', 0.26), step(59, 0.08, 'triangle', 0.26), step(64, 0.14, 'triangle', 0.22)],
+  banditRawhide: [
+    step(52, 0.08, 'triangle', 0.26),
+    step(59, 0.08, 'triangle', 0.26),
+    step(64, 0.14, 'triangle', 0.22),
+  ],
 
   // --- Warnings: insistent, unlike either of the above -----------------------
-  warnFood:  [step(70, 0.11, 'triangle', 0.44), step(63, 0.20, 'triangle', 0.42)],
-  warnWater: [step(75, 0.11, 'triangle', 0.44), step(68, 0.20, 'triangle', 0.42)],
-  warnPee:   [step(78, 0.08, 'square', 0.38), step(78, 0.08, 'square', 0.38), step(85, 0.12, 'square', 0.36)],
+  warnFood: [step(70, 0.11, 'triangle', 0.44), step(63, 0.2, 'triangle', 0.42)],
+  warnWater: [step(75, 0.11, 'triangle', 0.44), step(68, 0.2, 'triangle', 0.42)],
+  warnPee: [step(78, 0.08, 'square', 0.38), step(78, 0.08, 'square', 0.38), step(85, 0.12, 'square', 0.36)],
 };
 
 // Food pickup, transposed by how good the pickup was: a bag should sound like a

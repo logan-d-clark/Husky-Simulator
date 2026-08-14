@@ -3,14 +3,24 @@ import { emptyFences, type Tile } from './tiles';
 import type { TileType } from '../types';
 import { config } from '../config/gameConfig';
 
-export interface GameMap { rows: number; cols: number; tiles: Tile[][]; }
+export interface GameMap {
+  rows: number;
+  cols: number;
+  tiles: Tile[][];
+}
 
 const CLASS_TO_TYPE: Record<string, TileType> = {
-  G: 'grass', H: 'house', P: 'pavement', W: 'water',
+  G: 'grass',
+  H: 'house',
+  P: 'pavement',
+  W: 'water',
 };
 
 export function parseMap(csvText: string): GameMap {
-  const lines = csvText.replace(/\r/g, '').split('\n').filter((l) => l.trim().length > 0);
+  const lines = csvText
+    .replace(/\r/g, '')
+    .split('\n')
+    .filter((l) => l.trim().length > 0);
   const tiles: Tile[][] = [];
 
   lines.forEach((line, row) => {
@@ -25,8 +35,15 @@ export function parseMap(csvText: string): GameMap {
       if (fences.includes('b')) fenceEdges.bottom = true;
       const heat = type === 'grass' ? config.HEAT_GRASS : type === 'pavement' ? config.HEAT_PAVEMENT : 0;
       return {
-        col, row, type, ownerId, fences: fenceEdges,
-        heat, dirt: 0, destruction: 0, foodPresent: false,
+        col,
+        row,
+        type,
+        ownerId,
+        fences: fenceEdges,
+        heat,
+        dirt: 0,
+        destruction: 0,
+        foodPresent: false,
         houseColor: type === 'house' ? 'marble' : undefined,
       };
     });

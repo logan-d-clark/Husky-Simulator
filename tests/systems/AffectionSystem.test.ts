@@ -5,7 +5,12 @@ import type { OwnerData } from '../../src/data/owners';
 import { config } from '../../src/config/gameConfig';
 
 const data = (over: Partial<OwnerData> = {}): OwnerData => ({
-  id: 5, affection: 50, sensitivity: 2, treatRateBase: 0.5, name: 'Test', ...over,
+  id: 5,
+  affection: 50,
+  sensitivity: 2,
+  treatRateBase: 0.5,
+  name: 'Test',
+  ...over,
 });
 
 describe('AffectionSystem', () => {
@@ -43,7 +48,10 @@ describe('AffectionSystem', () => {
     // rollDispense draws twice at a maxed yard: once for the pup cup, then once
     // for the existing chain. `rolls` feeds an explicit sequence so each draw is
     // controlled rather than inferred.
-    const rolls = (...vals: number[]) => { let i = 0; return () => vals[Math.min(i++, vals.length - 1)]; };
+    const rolls = (...vals: number[]) => {
+      let i = 0;
+      return () => vals[Math.min(i++, vals.length - 1)];
+    };
     // treatRateActive = base * affection/25, so base 0.25 at affection 100 gives
     // p = 1 and the likelihood bands are their literal values. (A huge base, as
     // the bag test uses, makes every band exceed 1 so no roll can ever miss.)

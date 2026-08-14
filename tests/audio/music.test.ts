@@ -1,7 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import {
-  barNotes, chordRootForBar, scaleForBar, mulberry32, barsToSchedule,
-  PROGRESSION, BAR_SECONDS, BPM,
+  barNotes,
+  chordRootForBar,
+  scaleForBar,
+  mulberry32,
+  barsToSchedule,
+  PROGRESSION,
+  BAR_SECONDS,
+  BPM,
 } from '../../src/audio/music';
 import { midiToFreq } from '../../src/audio/tones';
 
@@ -32,7 +38,10 @@ describe('music', () => {
       for (let bar = 0; bar < 8; bar++) {
         const allowed = scaleForBar(bar).map(midiToFreq);
         for (const note of barNotes(bar, seeded()).lead) {
-          expect(allowed.some((f) => Math.abs(f - note.freq) < 1e-6), `bar ${bar}`).toBe(true);
+          expect(
+            allowed.some((f) => Math.abs(f - note.freq) < 1e-6),
+            `bar ${bar}`,
+          ).toBe(true);
         }
       }
     });
@@ -123,7 +132,8 @@ describe('music', () => {
 
   describe('mulberry32', () => {
     it('produces a stable stream in [0,1)', () => {
-      const a = mulberry32(7), b = mulberry32(7);
+      const a = mulberry32(7),
+        b = mulberry32(7);
       for (let i = 0; i < 50; i++) {
         const v = a();
         expect(v).toBeGreaterThanOrEqual(0);

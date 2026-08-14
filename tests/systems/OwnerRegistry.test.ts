@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { parseMap } from '../../src/world/MapParser';
-import { OwnerRegistry, yardCentroid, dispenseOverMap, buildRelieveTargets } from '../../src/systems/OwnerRegistry';
+import {
+  OwnerRegistry,
+  yardCentroid,
+  dispenseOverMap,
+  buildRelieveTargets,
+} from '../../src/systems/OwnerRegistry';
 import type { Food } from '../../src/entities/Food';
 
 describe('OwnerRegistry', () => {
@@ -30,7 +35,7 @@ describe('OwnerRegistry', () => {
     const reg = new OwnerRegistry();
     map.tiles[0][0].dirt = 100; // POOP_MAX — this tile is full for poop
     expect(buildRelieveTargets(map, reg, holding(40))).toHaveLength(1); // only the open tile
-    expect(buildRelieveTargets(map, reg, holding(1))).toHaveLength(0);  // holds nothing drainable
+    expect(buildRelieveTargets(map, reg, holding(1))).toHaveLength(0); // holds nothing drainable
   });
 
   it('narrows targets to the channel he is draining', () => {
@@ -42,8 +47,8 @@ describe('OwnerRegistry', () => {
     map.tiles[0][0].dirt = 100; // POOP_MAX
     const both = holding(40, 40);
     expect(buildRelieveTargets(map, reg, both, 'poop')).toHaveLength(1);
-    expect(buildRelieveTargets(map, reg, both, 'pee')).toHaveLength(2);   // pee fits on both
-    expect(buildRelieveTargets(map, reg, both, null)).toHaveLength(2);    // either-channel default
+    expect(buildRelieveTargets(map, reg, both, 'pee')).toHaveLength(2); // pee fits on both
+    expect(buildRelieveTargets(map, reg, both, null)).toHaveLength(2); // either-channel default
   });
 
   it('yields nothing for a channel he is not carrying', () => {
@@ -58,7 +63,12 @@ describe('OwnerRegistry', () => {
     const reg = new OwnerRegistry();
     reg.get(2).affection = 100;
     const emitted: Food[] = [];
-    dispenseOverMap(map, reg, () => 0, (f) => emitted.push(f)); // roll 0 always <= p
+    dispenseOverMap(
+      map,
+      reg,
+      () => 0,
+      (f) => emitted.push(f),
+    ); // roll 0 always <= p
     expect(emitted.length).toBe(1);
     expect(map.tiles[0][0].foodPresent).toBe(true);
   });

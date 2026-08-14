@@ -15,8 +15,7 @@ process.stdin.on('end', () => {
   }
   if (!file || !/\.(ts|tsx|js|jsx|mjs|cjs|json|md|yaml|yml)$/.test(file)) process.exit(0);
 
-  const run = (cmd, args) =>
-    spawnSync(cmd, args, { stdio: 'ignore', shell: true });
+  const run = (cmd, args) => spawnSync(cmd, args, { stdio: 'ignore', shell: true });
 
   run('npx', ['--no-install', 'prettier', '--write', file]);
   if (/\.(ts|tsx|js|jsx|mjs|cjs)$/.test(file)) {

@@ -8,28 +8,37 @@ import { canFoulTile, type RelieveTarget, type WasteChannel } from './AISystem';
 
 export class OwnerRegistry {
   private byId = new Map<number, Owner>();
-  constructor() { for (const d of OWNERS) this.byId.set(d.id, new Owner(d)); }
+  constructor() {
+    for (const d of OWNERS) this.byId.set(d.id, new Owner(d));
+  }
   get(id: number): Owner {
     const o = this.byId.get(id);
     if (!o) throw new Error(`No owner ${id}`);
     return o;
   }
-  all(): Owner[] { return [...this.byId.values()]; }
+  all(): Owner[] {
+    return [...this.byId.values()];
+  }
 }
 
 export function yardCentroid(map: GameMap, ownerId: number): TileCoord | null {
   const owned: TileCoord[] = [];
-  for (const row of map.tiles) for (const t of row) {
-    if (t.type === 'grass' && t.ownerId === ownerId) owned.push({ col: t.col, row: t.row });
-  }
+  for (const row of map.tiles)
+    for (const t of row) {
+      if (t.type === 'grass' && t.ownerId === ownerId) owned.push({ col: t.col, row: t.row });
+    }
   if (owned.length === 0) return null;
   const avgCol = owned.reduce((s, c) => s + c.col, 0) / owned.length;
   const avgRow = owned.reduce((s, c) => s + c.row, 0) / owned.length;
   // snap to the owned tile nearest the average
-  let best = owned[0]; let bestD = Infinity;
+  let best = owned[0];
+  let bestD = Infinity;
   for (const c of owned) {
     const d = (c.col - avgCol) ** 2 + (c.row - avgRow) ** 2;
-    if (d < bestD) { bestD = d; best = c; }
+    if (d < bestD) {
+      bestD = d;
+      best = c;
+    }
   }
   return best;
 }
@@ -41,28 +50,39 @@ export function yardCentroid(map: GameMap, ownerId: number): TileCoord | null {
 // is excluded — Bandit only fouls family yards. `channel` narrows availability to
 // the one he's currently draining, so he never walks to a tile that can't take it.
 export function buildRelieveTargets(
-  map: GameMap, reg: OwnerRegistry, inv: Inventory, channel: WasteChannel | null = null,
+  map: GameMap,
+  reg: OwnerRegistry,
+  inv: Inventory,
+  channel: WasteChannel | null = null,
 ): RelieveTarget[] {
   const targets: RelieveTarget[] = [];
   for (const row of map.tiles) {
     for (const t of row) {
       if (t.type !== 'grass' || t.ownerId === 0 || !canFoulTile(inv, t, channel)) continue;
-      targets.push({ tile: { col: t.col, row: t.row }, ownerId: t.ownerId, affection: reg.get(t.ownerId).affection });
+      targets.push({
+        tile: { col: t.col, row: t.row },
+        ownerId: t.ownerId,
+        affection: reg.get(t.ownerId).affection,
+      });
     }
   }
   return targets;
 }
 
 export function dispenseOverMap(
-  map: GameMap, reg: OwnerRegistry, rand: () => number, emit: (food: Food) => void,
+  map: GameMap,
+  reg: OwnerRegistry,
+  rand: () => number,
+  emit: (food: Food) => void,
 ): void {
-  for (const row of map.tiles) for (const t of row) {
-    if (t.type !== 'grass' || t.foodPresent) continue;
-    const owner = reg.get(t.ownerId);
-    const type = AffectionSystem.rollDispense(owner, rand);
-    if (type) {
-      t.foodPresent = true;
-      emit({ type, value: foodValue(type), tile: { col: t.col, row: t.row } });
+  for (const row of map.tiles)
+    for (const t of row) {
+      if (t.type !== 'grass' || t.foodPresent) continue;
+      const owner = reg.get(t.ownerId);
+      const type = AffectionSystem.rollDispense(owner, rand);
+      if (type) {
+        t.foodPresent = true;
+        emit({ type, value: foodValue(type), tile: { col: t.col, row: t.row } });
+      }
     }
-  }
 }

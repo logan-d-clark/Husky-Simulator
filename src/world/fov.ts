@@ -35,17 +35,25 @@ function fenceBlocks(map: GameMap, col: number, row: number, dir: Direction): bo
 // time. Blocked if a crossed edge has a fence, or an intermediate (non-target)
 // tile is a house.
 function hasLineOfSight(map: GameMap, from: TileCoord, tc: number, tr: number): boolean {
-  let x = from.col, y = from.row;
-  const stepX = Math.sign(tc - from.col), stepY = Math.sign(tr - from.row);
-  const nx = Math.abs(tc - from.col), ny = Math.abs(tr - from.row);
-  let ix = 0, iy = 0;
+  let x = from.col,
+    y = from.row;
+  const stepX = Math.sign(tc - from.col),
+    stepY = Math.sign(tr - from.row);
+  const nx = Math.abs(tc - from.col),
+    ny = Math.abs(tr - from.row);
+  let ix = 0,
+    iy = 0;
 
   while (ix < nx || iy < ny) {
     let dir: Direction;
     if (iy >= ny || (ix < nx && (0.5 + ix) * ny < (0.5 + iy) * nx)) {
-      x += stepX; ix++; dir = stepX > 0 ? 'right' : 'left';
+      x += stepX;
+      ix++;
+      dir = stepX > 0 ? 'right' : 'left';
     } else {
-      y += stepY; iy++; dir = stepY > 0 ? 'down' : 'up';
+      y += stepY;
+      iy++;
+      dir = stepY > 0 ? 'down' : 'up';
     }
     // Fence on the edge just crossed (from the previous cell into this one).
     const pc = dir === 'right' ? x - 1 : dir === 'left' ? x + 1 : x;

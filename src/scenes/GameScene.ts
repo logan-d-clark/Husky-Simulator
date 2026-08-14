@@ -6,9 +6,17 @@ import { GRID, SIM_HZ, TICKS_PER_SECOND, GATE_TILES, CHI_START_TILE } from '../c
 import { setGate, advanceGateSeconds } from '../world/gate';
 import { ITEMS, ITEM_TYPES, type ItemType } from '../entities/Item';
 import {
-  emptyCounts, itemDropChance, randomItemType,
-  grant, consume, repellerBlocks, milestonesToGrant, nextTutorial, tickRepellers,
-  type ItemCounts, type Repeller,
+  emptyCounts,
+  itemDropChance,
+  randomItemType,
+  grant,
+  consume,
+  repellerBlocks,
+  milestonesToGrant,
+  nextTutorial,
+  tickRepellers,
+  type ItemCounts,
+  type Repeller,
 } from '../systems/ItemSystem';
 import { config } from '../config/gameConfig';
 import type { Tile } from '../world/tiles';
@@ -16,13 +24,27 @@ import { Husky } from '../entities/Husky';
 import { Chihuahua } from '../entities/Chihuahua';
 import { ResourceSystem } from '../systems/ResourceSystem';
 import { WorldActions } from '../systems/WorldActions';
-import { nextBanditMove, banditTweenDuration, isWaterAdjacent, firstReachableRelieveTarget, banditGoalLabel, bestFoodAnywhere, bfsFirstStep, type RelieveTarget } from '../systems/AISystem';
+import {
+  nextBanditMove,
+  banditTweenDuration,
+  isWaterAdjacent,
+  firstReachableRelieveTarget,
+  banditGoalLabel,
+  bestFoodAnywhere,
+  bfsFirstStep,
+  type RelieveTarget,
+} from '../systems/AISystem';
 import { OwnerRegistry, dispenseOverMap, buildRelieveTargets } from '../systems/OwnerRegistry';
 import { BanditController, type BanditTickInput } from '../systems/BanditController';
 import { createBadges, updateBadges, type Badge } from '../ui/HouseholdProfile';
 import type { Direction, TileCoord } from '../types';
 import { takeFoodAt, type Food } from '../entities/Food';
-import { getDifficultySettings, banditDelaySeconds, DEFAULT_DIFFICULTY, type Difficulty } from '../config/difficulty';
+import {
+  getDifficultySettings,
+  banditDelaySeconds,
+  DEFAULT_DIFFICULTY,
+  type Difficulty,
+} from '../config/difficulty';
 import { attachDevPanel } from '../ui/DevPanel';
 import { assignHouseFaces } from '../world/houseFacades';
 import { audio } from '../audio/AudioEngine';
@@ -57,8 +79,12 @@ export class GameScene extends Phaser.Scene {
   // holding a key gives one sound rather than ten a second; Bandit's cue fires
   // on a mode change, not per tick.
   private warnings = new WarningTracker();
-  private actionsApplied: Record<'poop' | 'pee' | 'trick' | 'drink', boolean> =
-    { poop: false, pee: false, trick: false, drink: false };
+  private actionsApplied: Record<'poop' | 'pee' | 'trick' | 'drink', boolean> = {
+    poop: false,
+    pee: false,
+    trick: false,
+    drink: false,
+  };
   private lastBanditGoal: BanditGoal = 'treat';
   // Bandit starts the round penned behind the Grumbles' driveway gate. Tinted
   // apart from the ordinary fences so the player reads it as a thing that opens.
@@ -70,12 +96,16 @@ export class GameScene extends Phaser.Scene {
   // --- items ---------------------------------------------------------------
   private items: ItemCounts = emptyCounts();
   private itemPickups: { type: ItemType; tile: TileCoord; sprite: Phaser.GameObjects.Image }[] = [];
-  private seenItems = new Set<ItemType>();       // which tutorials have shown this round
+  private seenItems = new Set<ItemType>(); // which tutorials have shown this round
   private tutorialQueue: ItemType[] = [];
   private tutorialShowing = false;
-  private milestonesPaid = 0;                    // highest 1000-food milestone already granted
+  private milestonesPaid = 0; // highest 1000-food milestone already granted
   private rawhide: { tile: TileCoord; secondsLeft: number; sprite: Phaser.GameObjects.Image } | null = null;
-  private repellers: (Repeller & { sprite: Phaser.GameObjects.Image; ring: Phaser.GameObjects.Graphics; label: Phaser.GameObjects.Text })[] = [];
+  private repellers: (Repeller & {
+    sprite: Phaser.GameObjects.Image;
+    ring: Phaser.GameObjects.Graphics;
+    label: Phaser.GameObjects.Text;
+  })[] = [];
   private zoomSecondsLeft = 0;
   private itemTickInSecond = 0;
   private foods: Food[] = [];
@@ -86,7 +116,9 @@ export class GameScene extends Phaser.Scene {
   private badges: Badge[] = [];
   private badgeTickCounter = 0;
 
-  constructor() { super('Game'); }
+  constructor() {
+    super('Game');
+  }
 
   // Phaser runs init(data) before create() on every scene.start, so the
   // difficulty chosen on the menu is resolved here (default Normal if absent).
@@ -116,7 +148,7 @@ export class GameScene extends Phaser.Scene {
     this.chiMoving = false;
     this.acc = 0;
     this.action = null;
-    this.warnings = new WarningTracker();          // a fresh round re-arms every warning
+    this.warnings = new WarningTracker(); // a fresh round re-arms every warning
     this.actionsApplied = { poop: false, pee: false, trick: false, drink: false };
     // Bandit's brain is per-run state too. Without this, "Play Again" after a
     // round that ended mid-relief resumes that episode — still committed to a
@@ -220,12 +252,20 @@ export class GameScene extends Phaser.Scene {
   getHudState() {
     const t = this.currentTile();
     return {
-      food: this.husky.inv.food, water: this.husky.inv.water,
-      poop: this.husky.inv.poop, pee: this.husky.inv.pee,
+      food: this.husky.inv.food,
+      water: this.husky.inv.water,
+      poop: this.husky.inv.poop,
+      pee: this.husky.inv.pee,
       secondsLeft: this.secondsLeft,
-      huskyFood: this.husky.inv.food, chiFood: this.chihuahua.inv.food,
-      chiWater: this.chihuahua.inv.water, chiPoop: this.chihuahua.inv.poop, chiPee: this.chihuahua.inv.pee,
-      chiGoalLabel: banditGoalLabel(this.banditController.currentGoal(), this.banditController.activeChannel()),
+      huskyFood: this.husky.inv.food,
+      chiFood: this.chihuahua.inv.food,
+      chiWater: this.chihuahua.inv.water,
+      chiPoop: this.chihuahua.inv.poop,
+      chiPee: this.chihuahua.inv.pee,
+      chiGoalLabel: banditGoalLabel(
+        this.banditController.currentGoal(),
+        this.banditController.activeChannel(),
+      ),
       items: { ...this.items },
       currentTile: { heat: t.heat, dirt: t.dirt, destruction: t.destruction, ownerId: t.ownerId },
     };
@@ -241,18 +281,42 @@ export class GameScene extends Phaser.Scene {
     kb.removeAllKeys(true);
     const map: Record<string, Direction> = { W: 'up', S: 'down', A: 'left', D: 'right' };
     for (const [k, dir] of Object.entries(map)) {
-      kb.addKey(k).on('down', () => { this.held[dir] = true; this.husky.facing = dir; this.tryStep(); });
-      kb.addKey(k).on('up', () => { this.held[dir] = false; });
+      kb.addKey(k).on('down', () => {
+        this.held[dir] = true;
+        this.husky.facing = dir;
+        this.tryStep();
+      });
+      kb.addKey(k).on('up', () => {
+        this.held[dir] = false;
+      });
     }
-    kb.addKey('Q').on('down', () => { this.action = 'drink'; });
-    kb.addKey('Q').on('up', () => { if (this.action === 'drink') this.action = null; });
-    kb.addKey('C').on('down', () => { this.action = 'poop'; });
-    kb.addKey('C').on('up', () => { if (this.action === 'poop') this.action = null; });
-    kb.addKey('Z').on('down', () => { this.action = 'pee'; });
-    kb.addKey('Z').on('up', () => { if (this.action === 'pee') this.action = null; });
-    kb.addKey('E').on('down', () => { this.action = 'trick'; });
-    kb.addKey('E').on('up', () => { if (this.action === 'trick') this.action = null; });
-    kb.addKey('M').on('down', () => { audio.toggleMute(); });
+    kb.addKey('Q').on('down', () => {
+      this.action = 'drink';
+    });
+    kb.addKey('Q').on('up', () => {
+      if (this.action === 'drink') this.action = null;
+    });
+    kb.addKey('C').on('down', () => {
+      this.action = 'poop';
+    });
+    kb.addKey('C').on('up', () => {
+      if (this.action === 'poop') this.action = null;
+    });
+    kb.addKey('Z').on('down', () => {
+      this.action = 'pee';
+    });
+    kb.addKey('Z').on('up', () => {
+      if (this.action === 'pee') this.action = null;
+    });
+    kb.addKey('E').on('down', () => {
+      this.action = 'trick';
+    });
+    kb.addKey('E').on('up', () => {
+      if (this.action === 'trick') this.action = null;
+    });
+    kb.addKey('M').on('down', () => {
+      audio.toggleMute();
+    });
     // Bind by key CODE. Phaser's addKey resolves a string through KeyCodes, and
     // KeyCodes has no '1' — the digits are ONE..FOUR — so addKey('1') silently
     // registers a key that can never fire.
@@ -263,10 +327,15 @@ export class GameScene extends Phaser.Scene {
 
   update(_t: number, delta: number) {
     this.acc += Math.min(delta, 250);
-    while (this.acc >= this.step) { this.acc -= this.step; this.simTick(); }
+    while (this.acc >= this.step) {
+      this.acc -= this.step;
+      this.simTick();
+    }
   }
 
-  private currentTile() { return this.map.tiles[this.husky.tile.row][this.husky.tile.col]; }
+  private currentTile() {
+    return this.map.tiles[this.husky.tile.row][this.husky.tile.col];
+  }
 
   // Advance one tile if a direction key is held and the path is clear. Called
   // on keydown (immediate start from rest), from each sim tick (safety-net
@@ -288,15 +357,28 @@ export class GameScene extends Phaser.Scene {
     this.husky.tile = to;
     if (!zooming) ResourceSystem.applyMoveCost(this.husky.inv); // the chew is free while it lasts
     this.moving = true;
-    this.advanceEntity(this.huskySprite, to, zooming ? this.step / config.ZOOM_SPEED_MULTIPLIER : this.step, () => {
-      this.moving = false; this.onEnterTile(); this.tryStep();
-    });
+    this.advanceEntity(
+      this.huskySprite,
+      to,
+      zooming ? this.step / config.ZOOM_SPEED_MULTIPLIER : this.step,
+      () => {
+        this.moving = false;
+        this.onEnterTile();
+        this.tryStep();
+      },
+    );
   }
 
   private zoomDirection(): Direction | undefined {
     const food = bestFoodAnywhere(this.husky.tile, this.foods);
-    if (!food) { this.zoomSecondsLeft = 0; return undefined; } // map is bare: hand control back early
-    return bfsFirstStep(this.grid, this.husky.tile, (t) => t.col === food.tile.col && t.row === food.tile.row) ?? undefined;
+    if (!food) {
+      this.zoomSecondsLeft = 0;
+      return undefined;
+    } // map is bare: hand control back early
+    return (
+      bfsFirstStep(this.grid, this.husky.tile, (t) => t.col === food.tile.col && t.row === food.tile.row) ??
+      undefined
+    );
   }
 
   // Chihuahua step: pathfind one tile toward the nearest treat and glide there,
@@ -325,10 +407,16 @@ export class GameScene extends Phaser.Scene {
   private chiRelieveContext(): { relieveTargets: RelieveTarget[]; onTargetYard: boolean } {
     if (this.banditController.currentGoal() !== 'relief') return { relieveTargets: [], onTargetYard: false };
     const relieveTargets = buildRelieveTargets(
-      this.map, this.ownerRegistry, this.chihuahua.inv, this.banditController.activeChannel(),
+      this.map,
+      this.ownerRegistry,
+      this.chihuahua.inv,
+      this.banditController.activeChannel(),
     );
     const target = firstReachableRelieveTarget(
-      this.grid, this.chihuahua.tile, relieveTargets, this.banditController.committedYard(),
+      this.grid,
+      this.chihuahua.tile,
+      relieveTargets,
+      this.banditController.committedYard(),
     );
     if (!target) return { relieveTargets, onTargetYard: false };
     this.banditController.commitYard(target.ownerId);
@@ -388,7 +476,8 @@ export class GameScene extends Phaser.Scene {
     this.chihuahua.facing = move.dir;
     const to = this.grid.neighbor(this.chihuahua.tile, move.dir);
     this.chihuahua.tile = to;
-    if (!this.gateShut()) { // see updateBandit: no drain while he's penned at home
+    if (!this.gateShut()) {
+      // see updateBandit: no drain while he's penned at home
       ResourceSystem.applyMoveCost(this.chihuahua.inv); // food/water down, poop/pee up (min 0 food is fine — no death)
       this.chihuahua.inv.food = Math.max(0, this.chihuahua.inv.food);
     }
@@ -397,7 +486,9 @@ export class GameScene extends Phaser.Scene {
     const base = this.step * this.chiSpeedMultiplier;
     const dur = banditTweenDuration(base, move.mode, config.PATROL_SPEED_MULTIPLIER);
     this.advanceEntity(this.chiSprite, to, dur, () => {
-      this.chiMoving = false; this.onChiEnterTile(); this.tryChiStep();
+      this.chiMoving = false;
+      this.onChiEnterTile();
+      this.tryChiStep();
     });
   }
 
@@ -412,7 +503,12 @@ export class GameScene extends Phaser.Scene {
   ) {
     const p = this.grid.tileToPixel(to);
     this.tweens.add({
-      targets: sprite, x: p.x, y: p.y, duration, ease: 'Linear', onComplete: onArrive,
+      targets: sprite,
+      x: p.x,
+      y: p.y,
+      duration,
+      ease: 'Linear',
+      onComplete: onArrive,
     });
   }
 
@@ -504,7 +600,10 @@ export class GameScene extends Phaser.Scene {
       if (this.tickInSecond === 0) this.secondsLeft -= 1;
     }
     const end = this.devMode ? null : ResourceSystem.shouldEndGame(this.husky.inv, this.secondsLeft);
-    if (end) { this.endGame(end); return; }
+    if (end) {
+      this.endGame(end);
+      return;
+    }
   }
 
   private endGame(reason: 'Time' | 'Food' | 'Water') {
@@ -534,7 +633,9 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private fkey(c: number, r: number) { return `${c},${r}`; }
+  private fkey(c: number, r: number) {
+    return `${c},${r}`;
+  }
 
   private onEnterTile() {
     const tile = this.currentTile();
@@ -558,7 +659,13 @@ export class GameScene extends Phaser.Scene {
 
   private nearWater(): boolean {
     const { col, row } = this.husky.tile;
-    for (const [dc, dr] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    for (const [dc, dr] of [
+      [0, 0],
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ]) {
       const t = this.grid.tileAt(col + dc, row + dr);
       if (t && t.type === 'water') return true;
     }
@@ -571,7 +678,10 @@ export class GameScene extends Phaser.Scene {
     // for bottom-of-map houses), remaining facade tiles bare/windowed.
     const faces = assignHouseFaces(this.map);
     const FACE_TEXTURE: Record<string, string> = {
-      roof: 'house-roof', door: 'house-front-door', window: 'house-front-window', bare: 'house-front-bare',
+      roof: 'house-roof',
+      door: 'house-front-door',
+      window: 'house-front-window',
+      bare: 'house-front-bare',
     };
     for (let r = 0; r < this.map.rows; r++) {
       this.tileSprites[r] = [];
@@ -597,8 +707,11 @@ export class GameScene extends Phaser.Scene {
     const T = GRID.TILE;
     setGate(this.map, true);
     for (const g of GATE_TILES) {
-      const spr = this.add.image(g.col * T + T - 4, g.row * T, 'fenceV')
-        .setOrigin(0, 0).setDepth(6).setTint(GameScene.GATE_TINT);
+      const spr = this.add
+        .image(g.col * T + T - 4, g.row * T, 'fenceV')
+        .setOrigin(0, 0)
+        .setDepth(6)
+        .setTint(GameScene.GATE_TINT);
       this.gateSprites.push(spr);
     }
   }
@@ -611,7 +724,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** True while Bandit is still penned in the Grumbles' yard. */
-  private gateShut(): boolean { return this.gateSprites.length > 0; }
+  private gateShut(): boolean {
+    return this.gateSprites.length > 0;
+  }
 
   // ---------------------------------------------------------------- items ---
 
@@ -628,20 +743,27 @@ export class GameScene extends Phaser.Scene {
     // Reachability comes from the same BFS that moves him, so he can never
     // commit to a rawhide he cannot actually walk to (penned behind the gate,
     // or fenced off by his own repeller aversion).
-    const reachable = onIt
-      || bfsFirstStep(this.grid, this.chihuahua.tile, (c) => c.col === t.col && c.row === t.row, this.banditBlocked()) !== null;
+    const reachable =
+      onIt ||
+      bfsFirstStep(
+        this.grid,
+        this.chihuahua.tile,
+        (c) => c.col === t.col && c.row === t.row,
+        this.banditBlocked(),
+      ) !== null;
     return { reachable, onIt };
   }
 
   private deployItem(type: ItemType) {
     if (this.over || this.zoomSecondsLeft > 0) return; // no deploying mid-zoomies
-    if (!consume(this.items, type)) return;            // pressed a key for one he hasn't got
+    if (!consume(this.items, type)) return; // pressed a key for one he hasn't got
     const tile = { ...this.husky.tile };
     const p = this.grid.tileToPixel(tile);
     if (type === 'rawhide') {
-      this.rawhide?.sprite.destroy();                  // only one at a time; the newest wins
+      this.rawhide?.sprite.destroy(); // only one at a time; the newest wins
       this.rawhide = {
-        tile, secondsLeft: config.RAWHIDE_EAT_SECONDS,
+        tile,
+        secondsLeft: config.RAWHIDE_EAT_SECONDS,
         sprite: this.add.image(p.x, p.y, 'rawhide').setDepth(8),
       };
     } else if (type === 'repeller') {
@@ -650,10 +772,13 @@ export class GameScene extends Phaser.Scene {
       ring.lineStyle(2, 0x7fbfe0, 0.8).strokeCircle(p.x, p.y, radius);
       ring.fillStyle(0x7fbfe0, 0.08).fillCircle(p.x, p.y, radius);
       this.repellers.push({
-        tile, secondsLeft: config.REPELLER_SECONDS,
+        tile,
+        secondsLeft: config.REPELLER_SECONDS,
         sprite: this.add.image(p.x, p.y, 'repeller').setDepth(8),
         ring,
-        label: this.add.text(p.x + 10, p.y - 18, `${config.REPELLER_SECONDS}`, { fontSize: '12px', color: '#eaf6ff' }).setDepth(9),
+        label: this.add
+          .text(p.x + 10, p.y - 18, `${config.REPELLER_SECONDS}`, { fontSize: '12px', color: '#eaf6ff' })
+          .setDepth(9),
       });
     } else if (type === 'diaper') {
       // Deliberately NOT via WorldActions: every path there deposits into the
@@ -673,11 +798,15 @@ export class GameScene extends Phaser.Scene {
       const onIt = this.rawhideState()?.onIt;
       if (onIt && --this.rawhide.secondsLeft <= 0) {
         this.rawhide.sprite.destroy();
-        this.rawhide = null;   // controller hands his interrupted mode back
+        this.rawhide = null; // controller hands his interrupted mode back
       }
     }
     const { alive, expired } = tickRepellers(this.repellers);
-    for (const r of expired) { r.sprite.destroy(); r.ring.destroy(); r.label.destroy(); }
+    for (const r of expired) {
+      r.sprite.destroy();
+      r.ring.destroy();
+      r.label.destroy();
+    }
     for (const r of alive) r.label.setText(`${r.secondsLeft}`);
     this.repellers = alive;
     if (this.zoomSecondsLeft > 0) this.zoomSecondsLeft -= 1;
@@ -695,9 +824,15 @@ export class GameScene extends Phaser.Scene {
   }
 
   private dropItemSomewhere() {
-    const free = this.map.tiles.flat().filter((t) =>
-      t.type !== 'house' && t.type !== 'water' && !t.foodPresent
-      && !this.itemPickups.some((i) => i.tile.col === t.col && i.tile.row === t.row));
+    const free = this.map.tiles
+      .flat()
+      .filter(
+        (t) =>
+          t.type !== 'house' &&
+          t.type !== 'water' &&
+          !t.foodPresent &&
+          !this.itemPickups.some((i) => i.tile.col === t.col && i.tile.row === t.row),
+      );
     if (free.length === 0) return;
     const tile = free[Math.floor(Math.random() * free.length)];
     const type = randomItemType(Math.random);
@@ -723,7 +858,10 @@ export class GameScene extends Phaser.Scene {
   private showNextTutorial() {
     if (this.over || this.tutorialShowing) return;
     const type = nextTutorial(this.seenItems, this.tutorialQueue);
-    if (!type) { this.tutorialQueue = []; return; }
+    if (!type) {
+      this.tutorialQueue = [];
+      return;
+    }
     this.tutorialQueue = this.tutorialQueue.filter((t) => t !== type);
     this.seenItems.add(type);
     this.tutorialShowing = true;
@@ -750,16 +888,26 @@ export class GameScene extends Phaser.Scene {
 
   private drawFences(tile: Tile) {
     const T = GRID.TILE;
-    const x = tile.col * T, y = tile.row * T;
+    const x = tile.col * T,
+      y = tile.row * T;
     if (tile.fences.top) this.add.image(x, y, 'fenceH').setOrigin(0, 0).setDepth(5);
-    if (tile.fences.bottom) this.add.image(x, y + T - 4, 'fenceH').setOrigin(0, 0).setDepth(5);
+    if (tile.fences.bottom)
+      this.add
+        .image(x, y + T - 4, 'fenceH')
+        .setOrigin(0, 0)
+        .setDepth(5);
     if (tile.fences.left) this.add.image(x, y, 'fenceV').setOrigin(0, 0).setDepth(5);
-    if (tile.fences.right) this.add.image(x + T - 4, y, 'fenceV').setOrigin(0, 0).setDepth(5);
+    if (tile.fences.right)
+      this.add
+        .image(x + T - 4, y, 'fenceV')
+        .setOrigin(0, 0)
+        .setDepth(5);
   }
 
   // Maps dirt (poop) + destruction (pee) to a tint, reproducing V1's GRASS_COLORS matrix intent.
   grassColor(tile: Tile): number {
-    const dirt = tile.dirt, dest = tile.destruction;
+    const dirt = tile.dirt,
+      dest = tile.destruction;
     const destLevel = dest === 0 ? 0 : dest < 50 ? 1 : 2;
     const dirtLevel = dirt === 0 ? 0 : dirt < 50 ? 1 : 2;
     const MATRIX = [

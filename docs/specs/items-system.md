@@ -12,25 +12,25 @@ sinister relief cue and the delayed Bandit start.
 Four item types, deployed with number keys **1–4**. Counts are unbounded and
 shown in a new HUD row. Bandit can neither pick up nor use them.
 
-| Key | Item | Effect |
-| --- | --- | --- |
-| 1 | Rawhide | Dropped here. Pulls Bandit from anywhere on the map and pins him to that tile while he eats it. |
-| 2 | Sonic Dog Repeller | Dropped here. Bandit cannot enter its radius until it expires; he routes around. |
-| 3 | Doggy Diaper | Instantly empties poop and pee to zero, fouling nothing. |
-| 4 | Zoom Zoom Chew | 30s of autopilot at double speed, hoovering up food. |
+| Key | Item               | Effect                                                                                          |
+| --- | ------------------ | ----------------------------------------------------------------------------------------------- |
+| 1   | Rawhide            | Dropped here. Pulls Bandit from anywhere on the map and pins him to that tile while he eats it. |
+| 2   | Sonic Dog Repeller | Dropped here. Bandit cannot enter its radius until it expires; he routes around.                |
+| 3   | Doggy Diaper       | Instantly empties poop and pee to zero, fouling nothing.                                        |
+| 4   | Zoom Zoom Chew     | 30s of autopilot at double speed, hoovering up food.                                            |
 
 ### Tuning (all dev-panel knobs)
 
-| Knob | Default |
-| --- | --- |
-| `RAWHIDE_EAT_SECONDS` | 60 |
-| `REPELLER_RADIUS` | 6 tiles |
-| `REPELLER_SECONDS` | 60 |
-| `ZOOM_SECONDS` | 30 |
-| `ZOOM_SPEED_MULTIPLIER` | 2 |
-| `ITEM_DROP_PER_TICK` | 0.00025 |
-| `ITEM_DROP_FOOD_SCALE` | 800 |
-| `ITEM_MILESTONE_FOOD` | 1000 |
+| Knob                    | Default |
+| ----------------------- | ------- |
+| `RAWHIDE_EAT_SECONDS`   | 60      |
+| `REPELLER_RADIUS`       | 6 tiles |
+| `REPELLER_SECONDS`      | 60      |
+| `ZOOM_SECONDS`          | 30      |
+| `ZOOM_SPEED_MULTIPLIER` | 2       |
+| `ITEM_DROP_PER_TICK`    | 0.00025 |
+| `ITEM_DROP_FOOD_SCALE`  | 800     |
+| `ITEM_MILESTONE_FOOD`   | 1000    |
 
 ---
 
@@ -70,7 +70,7 @@ goal and simply routes around it; Blizzard is unaffected.
 one — this is why the repeller cannot live in `Grid.canMove` the way the gate
 does: `canMove` is shared by both dogs, and the whole point here is asymmetry.
 
-**It can never trap him.** A repeller only blocks Bandit while he is *outside*
+**It can never trap him.** A repeller only blocks Bandit while he is _outside_
 its radius; if one lands on top of him, it stops applying to him until he has
 walked clear. Without that rule a repeller dropped on his head would make every
 neighbouring tile illegal and freeze him permanently.
@@ -121,7 +121,7 @@ approaches, as asked. Over a 20-minute round (12 000 ticks) that is ≈3 drops a
 appears on a random walkable tile that has no food or item already.
 
 **Milestones.** Crossing each `ITEM_MILESTONE_FOOD` (1000, 2000, 3000 …) grants
-one random item immediately. Tracked by highest milestone *reached*, so food
+one random item immediately. Tracked by highest milestone _reached_, so food
 dipping and recovering cannot re-grant. That adds up to ~3 more, for **≈8–12 per
 game** — comfortably over the "at least 5" target with room above it.
 
@@ -228,14 +228,14 @@ Scenario: the rival cannot use tools
 
 ## Ambiguity log
 
-| Question | Resolution | Source |
-| --- | --- | --- |
-| Drain during zoomies | Suspended — a clean reward | user, 2026-08-10 |
-| Item tuning and drop rate | Defaults as tabled above | user, 2026-08-10 |
-| Rawhide vs. committed modes | Preempts everything | user, 2026-08-10 |
-| Item art | Authored SVGs in-style | user, 2026-08-10 |
-| Rawhide when unreachable | Ignored, re-checked each tick — never latches | assumed |
-| Repeller landing on Bandit | Stops applying to him until he is clear | assumed |
-| Zoomies vs. fog of war | Ignores it — the request names the omniscient algorithm | derived |
-| Does zoomies collect items too | Yes | assumed |
-| Tutorial implementation | Phaser overlay scene, not DOM | assumed |
+| Question                       | Resolution                                              | Source           |
+| ------------------------------ | ------------------------------------------------------- | ---------------- |
+| Drain during zoomies           | Suspended — a clean reward                              | user, 2026-08-10 |
+| Item tuning and drop rate      | Defaults as tabled above                                | user, 2026-08-10 |
+| Rawhide vs. committed modes    | Preempts everything                                     | user, 2026-08-10 |
+| Item art                       | Authored SVGs in-style                                  | user, 2026-08-10 |
+| Rawhide when unreachable       | Ignored, re-checked each tick — never latches           | assumed          |
+| Repeller landing on Bandit     | Stops applying to him until he is clear                 | assumed          |
+| Zoomies vs. fog of war         | Ignores it — the request names the omniscient algorithm | derived          |
+| Does zoomies collect items too | Yes                                                     | assumed          |
+| Tutorial implementation        | Phaser overlay scene, not DOM                           | assumed          |

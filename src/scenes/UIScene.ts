@@ -10,23 +10,34 @@ import { ITEMS, ITEM_TYPES } from '../entities/Item';
 export const HUD_H = 180;
 
 // Left zone: Blizzard's own stats. Right zone: the tile Blizzard is standing on.
-const LEFT_X = 24, LEFT_BAR = 168;
-const CS_X = 706;            // Current Space panel left edge
-const CS_A = 726, CS_A_BAR = 818;   // sub-column A (owner / tolerance / likes)
-const CS_B = 1012, CS_B_BAR = 1072; // sub-column B (heat / poop / pee)
-const BAR_W = 170, BAR_H = 14, BAR_R = 7;
+const LEFT_X = 24,
+  LEFT_BAR = 168;
+const CS_X = 706; // Current Space panel left edge
+const CS_A = 726,
+  CS_A_BAR = 818; // sub-column A (owner / tolerance / likes)
+const CS_B = 1012,
+  CS_B_BAR = 1072; // sub-column B (heat / poop / pee)
+const BAR_W = 170,
+  BAR_H = 14,
+  BAR_R = 7;
 // Blizzard's four stat rows share Current Space's top (y0+ROW0) and a tight
 // pitch so the left section reads as the same height as the right one — a
 // smaller Food→Water gap than before. Bars sit BAR_DY below their text row.
-const ROW0 = 58, ROW_PITCH = 22, BAR_DY = 3;
+const ROW0 = 58,
+  ROW_PITCH = 22,
+  BAR_DY = 3;
 const ROW = (i: number): number => ROW0 + i * ROW_PITCH; // 0=food 1=water 2=poop 3=pee
 // Bandit's stat block sits in the gap between Blizzard's card (ends 358) and
 // Current Space (starts 694). Narrower than Blizzard's, with a dimmer accent so
 // the player reads it as the rival's (informational) stats, not their own. Its
 // card ends 16px and its bars 24px clear of the Current Space card.
-const BANDIT_CARD_X = 366, BANDIT_CARD_W = 312;
-const BANDIT_X = 378, BANDIT_BAR = 512, BANDIT_BAR_W = 158;
-const BANDIT_DIM = '#b7a482', BANDIT_BAR_ALPHA = 0.6;
+const BANDIT_CARD_X = 366,
+  BANDIT_CARD_W = 312;
+const BANDIT_X = 378,
+  BANDIT_BAR = 512,
+  BANDIT_BAR_W = 158;
+const BANDIT_DIM = '#b7a482',
+  BANDIT_BAR_ALPHA = 0.6;
 // His mode line sits a row below the four stats, brighter than them so the
 // player can read his intent at a glance. ROW(4)=146 clears the card's floor (168).
 const BANDIT_GOAL = '#e8c98a';
@@ -37,7 +48,8 @@ const FOOD_THRESHOLDS = [
   { key: 'bag', threshold: () => config.BAG_THRESHOLD },
   { key: 'pupcup', threshold: () => config.PUPCUP_THRESHOLD },
 ] as const;
-const AFFECTION_BAR_Y = 121, AFFECTION_ICON_Y = 150;
+const AFFECTION_BAR_Y = 121,
+  AFFECTION_ICON_Y = 150;
 // Four item slots across Blizzard's 346-wide card.
 const ITEM_SLOT_W = 82;
 
@@ -46,7 +58,9 @@ export class UIScene extends Phaser.Scene {
   private texts: Record<string, Phaser.GameObjects.Text> = {};
   private thresholdIcons: Record<string, Phaser.GameObjects.Image> = {};
   private itemIcons: Record<string, Phaser.GameObjects.Image> = {};
-  constructor() { super('UI'); }
+  constructor() {
+    super('UI');
+  }
 
   create() {
     const y0 = DESIGN_HEIGHT;
@@ -55,30 +69,43 @@ export class UIScene extends Phaser.Scene {
 
     // Panel: warm dark card + summer-orange accent line. Drawn once.
     const panel = this.add.graphics();
-    panel.fillStyle(Phaser.Display.Color.HexStringToColor('#241f1b').color, 0.96)
-      .fillRect(0, y0, W, HUD_H);
-    panel.fillStyle(Phaser.Display.Color.HexStringToColor(PALETTE.treat).color, 1)
-      .fillRect(0, y0, W, 4);
+    panel.fillStyle(Phaser.Display.Color.HexStringToColor('#241f1b').color, 0.96).fillRect(0, y0, W, HUD_H);
+    panel.fillStyle(Phaser.Display.Color.HexStringToColor(PALETTE.treat).color, 1).fillRect(0, y0, W, 4);
     // Blizzard and Current Space each get their own matching inset card.
     const card = (x: number, w: number) => {
       panel.fillStyle(0xffffff, 0.05).fillRoundedRect(x, y0 + 30, w, HUD_H - 42, 10);
       panel.lineStyle(1, cream, 0.15).strokeRoundedRect(x, y0 + 30, w, HUD_H - 42, 10);
     };
-    card(12, 346);                                   // Blizzard
-    card(BANDIT_CARD_X, BANDIT_CARD_W);              // Bandit (rival — dimmer)
-    card(CS_X - 12, W - (CS_X - 12) - 20);           // Current Space
+    card(12, 346); // Blizzard
+    card(BANDIT_CARD_X, BANDIT_CARD_W); // Bandit (rival — dimmer)
+    card(CS_X - 12, W - (CS_X - 12) - 20); // Current Space
 
     this.g = this.add.graphics();
 
-    const mk = (k: string, x: number, y: number, size = '15px', originX = 0, color: string = PALETTE.hudText) => {
+    const mk = (
+      k: string,
+      x: number,
+      y: number,
+      size = '15px',
+      originX = 0,
+      color: string = PALETTE.hudText,
+    ) => {
       this.texts[k] = this.add.text(x, y, '', { color, fontSize: size }).setOrigin(originX, 0);
     };
     // header — timer sits beside the score, left-aligned to the Current Space panel
     mk('timer', CS_X, y0 + 10, '17px');
     mk('score', W - 24, y0 + 10, '17px', 1);
     // zone headers
-    this.add.text(LEFT_X, y0 + 34, HUSKY_NAME.toUpperCase(), { color: '#ffd27f', fontSize: '13px', fontStyle: 'bold' });
-    this.add.text(BANDIT_X, y0 + 34, `🐕 ${CHI_NAME.toUpperCase()}`, { color: '#d8b06a', fontSize: '13px', fontStyle: 'bold' });
+    this.add.text(LEFT_X, y0 + 34, HUSKY_NAME.toUpperCase(), {
+      color: '#ffd27f',
+      fontSize: '13px',
+      fontStyle: 'bold',
+    });
+    this.add.text(BANDIT_X, y0 + 34, `🐕 ${CHI_NAME.toUpperCase()}`, {
+      color: '#d8b06a',
+      fontSize: '13px',
+      fontStyle: 'bold',
+    });
     this.add.text(CS_X, y0 + 34, 'CURRENT SPACE', { color: '#ffd27f', fontSize: '13px', fontStyle: 'bold' });
     // left zone (Blizzard) — food matches the other stat rows' size
     mk('food', LEFT_X, y0 + ROW(0), '15px');
@@ -89,9 +116,16 @@ export class UIScene extends Phaser.Scene {
     // is the number key, the item's sprite, and how many he is carrying.
     ITEM_TYPES.forEach((type, i) => {
       const x = LEFT_X + i * ITEM_SLOT_W;
-      this.add.text(x, y0 + ROW(4) + 2, ITEMS[type].key, { color: '#ffd27f', fontSize: '12px', fontStyle: 'bold' });
+      this.add.text(x, y0 + ROW(4) + 2, ITEMS[type].key, {
+        color: '#ffd27f',
+        fontSize: '12px',
+        fontStyle: 'bold',
+      });
       this.itemIcons[type] = this.add.image(x + 20, y0 + ROW(4) + 9, type).setDisplaySize(15, 17);
-      this.texts[`item-${type}`] = this.add.text(x + 32, y0 + ROW(4) + 1, '', { color: PALETTE.hudText, fontSize: '14px' });
+      this.texts[`item-${type}`] = this.add.text(x + 32, y0 + ROW(4) + 1, '', {
+        color: PALETTE.hudText,
+        fontSize: '14px',
+      });
     });
     // Bandit (rival) — mirrors Blizzard's rows, dimmer accent
     mk('bFood', BANDIT_X, y0 + ROW(0), '15px', 0, BANDIT_DIM);
@@ -108,8 +142,11 @@ export class UIScene extends Phaser.Scene {
     // reach before each food can appear on their lawn. The icons sit below the
     // bar (which ends at y0+135) with the card floor at y0+168.
     for (const t of FOOD_THRESHOLDS) {
-      this.thresholdIcons[t.key] = this.add.image(0, y0 + AFFECTION_ICON_Y, t.key)
-        .setOrigin(0.5, 0.5).setDisplaySize(13, 14).setDepth(2);
+      this.thresholdIcons[t.key] = this.add
+        .image(0, y0 + AFFECTION_ICON_Y, t.key)
+        .setOrigin(0.5, 0.5)
+        .setDisplaySize(13, 14)
+        .setDepth(2);
     }
     // sub-column B
     mk('heat', CS_B, y0 + 58);
@@ -130,7 +167,9 @@ export class UIScene extends Phaser.Scene {
       const f = Math.max(0, Math.min(1, val / max)) * w;
       if (f > 1) {
         const rr = Math.min(BAR_R, f / 2);
-        this.g.fillStyle(Phaser.Display.Color.HexStringToColor(color).color, alpha).fillRoundedRect(x, y, f, BAR_H, rr);
+        this.g
+          .fillStyle(Phaser.Display.Color.HexStringToColor(color).color, alpha)
+          .fillRoundedRect(x, y, f, BAR_H, rr);
       }
     };
 
@@ -156,9 +195,33 @@ export class UIScene extends Phaser.Scene {
     }
 
     // Bandit (rival) — same stats as Blizzard, dimmer bars/text.
-    bar(BANDIT_BAR, y0 + ROW(1) + BAR_DY, s.chiWater, config.WATER_CAP, PALETTE.water, BANDIT_BAR_W, BANDIT_BAR_ALPHA);
-    bar(BANDIT_BAR, y0 + ROW(2) + BAR_DY, s.chiPoop, config.POOP_MAX, PALETTE.fence, BANDIT_BAR_W, BANDIT_BAR_ALPHA);
-    bar(BANDIT_BAR, y0 + ROW(3) + BAR_DY, s.chiPee, config.PEE_MAX, PALETTE.affection, BANDIT_BAR_W, BANDIT_BAR_ALPHA);
+    bar(
+      BANDIT_BAR,
+      y0 + ROW(1) + BAR_DY,
+      s.chiWater,
+      config.WATER_CAP,
+      PALETTE.water,
+      BANDIT_BAR_W,
+      BANDIT_BAR_ALPHA,
+    );
+    bar(
+      BANDIT_BAR,
+      y0 + ROW(2) + BAR_DY,
+      s.chiPoop,
+      config.POOP_MAX,
+      PALETTE.fence,
+      BANDIT_BAR_W,
+      BANDIT_BAR_ALPHA,
+    );
+    bar(
+      BANDIT_BAR,
+      y0 + ROW(3) + BAR_DY,
+      s.chiPee,
+      config.PEE_MAX,
+      PALETTE.affection,
+      BANDIT_BAR_W,
+      BANDIT_BAR_ALPHA,
+    );
     const n0 = (v: number) => Math.max(0, v).toFixed(0); // never show a transient "-0"
     this.texts.bFood.setText(`🍖 Food ${n0(s.chiFood)}`);
     this.texts.bWater.setText(`💧 Water ${n0(s.chiWater)}`);
@@ -167,9 +230,12 @@ export class UIScene extends Phaser.Scene {
     this.texts.bGoal.setText(s.chiGoalLabel);
 
     // Header
-    const mm = Math.floor(s.secondsLeft / 60), ss = s.secondsLeft % 60;
+    const mm = Math.floor(s.secondsLeft / 60),
+      ss = s.secondsLeft % 60;
     this.texts.timer.setText(`⏰ ${mm}:${ss.toString().padStart(2, '0')}`);
-    this.texts.score.setText(`🐺 ${HUSKY_NAME} ${s.huskyFood.toFixed(0)}     🐕 ${CHI_NAME} ${s.chiFood.toFixed(0)}`);
+    this.texts.score.setText(
+      `🐺 ${HUSKY_NAME} ${s.huskyFood.toFixed(0)}     🐕 ${CHI_NAME} ${s.chiFood.toFixed(0)}`,
+    );
 
     // Current Space — friendly indicators for the tile under Blizzard.
     this.texts.owner.setText(`🏠 ${info.name}`);
@@ -181,7 +247,8 @@ export class UIScene extends Phaser.Scene {
     for (const t of FOOD_THRESHOLDS) {
       const x = thresholdMarkerX(t.threshold(), CS_A_BAR, BAR_W);
       const reached = info.affection >= t.threshold();
-      this.g.fillStyle(Phaser.Display.Color.HexStringToColor(PALETTE.hudText).color, reached ? 0.9 : 0.4)
+      this.g
+        .fillStyle(Phaser.Display.Color.HexStringToColor(PALETTE.hudText).color, reached ? 0.9 : 0.4)
         .fillRect(Math.round(x) - 1, y0 + AFFECTION_BAR_Y - 3, 2, BAR_H + 6);
       this.thresholdIcons[t.key].setX(x).setAlpha(reached ? 1 : 0.45);
     }

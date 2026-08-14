@@ -7,13 +7,13 @@ import { midiToFreq, type ToneStep } from './tones';
 // to the same tune. It also makes the music pure, seeded data — testable without
 // a browser.
 
-export const BPM = 92;                 // unhurried; a porch on a hot afternoon
+export const BPM = 92; // unhurried; a porch on a hot afternoon
 export const BEATS_PER_BAR = 4;
 export const BAR_SECONDS = (60 / BPM) * BEATS_PER_BAR;
 const EIGHTH = BAR_SECONDS / 8;
 
-const ROOT_MIDI = 60;                  // C4
-const LEAD_OCTAVE = 12;                // melody sits an octave above the root
+const ROOT_MIDI = 60; // C4
+const LEAD_OCTAVE = 12; // melody sits an octave above the root
 const BASS_OCTAVE = -24;
 
 /** I – V – vi – IV in semitones from the key root. The summer-pop progression. */
@@ -22,7 +22,7 @@ export const PROGRESSION: readonly number[] = [0, 7, 9, 5];
 /** Major pentatonic — no semitone clashes, so a random walk always sounds intentional. */
 const PENTATONIC: readonly number[] = [0, 2, 4, 7, 9, 12];
 
-const REST_CHANCE = 0.42;   // sparse: it has to sit under the sound effects
+const REST_CHANCE = 0.42; // sparse: it has to sit under the sound effects
 const LONG_CHANCE = 0.25;
 
 export function chordRootForBar(bar: number): number {
@@ -47,8 +47,20 @@ export function barNotes(bar: number, rng: () => number): Bar {
   const scale = scaleForBar(bar);
 
   const bass: ToneStep[] = [
-    { freq: midiToFreq(ROOT_MIDI + root + BASS_OCTAVE), dur: BAR_SECONDS * 0.92, wave: 'triangle', gain: 0.5, at: 0 },
-    { freq: midiToFreq(ROOT_MIDI + root + BASS_OCTAVE + 7), dur: BAR_SECONDS * 0.42, wave: 'triangle', gain: 0.3, at: BAR_SECONDS / 2 },
+    {
+      freq: midiToFreq(ROOT_MIDI + root + BASS_OCTAVE),
+      dur: BAR_SECONDS * 0.92,
+      wave: 'triangle',
+      gain: 0.5,
+      at: 0,
+    },
+    {
+      freq: midiToFreq(ROOT_MIDI + root + BASS_OCTAVE + 7),
+      dur: BAR_SECONDS * 0.42,
+      wave: 'triangle',
+      gain: 0.3,
+      at: BAR_SECONDS / 2,
+    },
   ];
 
   const lead: ToneStep[] = [];
@@ -56,7 +68,13 @@ export function barNotes(bar: number, rng: () => number): Bar {
     if (rng() < REST_CHANCE) continue;
     const note = scale[Math.floor(rng() * scale.length)];
     const long = rng() < LONG_CHANCE;
-    lead.push({ freq: midiToFreq(note), dur: EIGHTH * (long ? 1.8 : 0.85), wave: 'sine', gain: 0.6, at: i * EIGHTH });
+    lead.push({
+      freq: midiToFreq(note),
+      dur: EIGHTH * (long ? 1.8 : 0.85),
+      wave: 'sine',
+      gain: 0.6,
+      at: i * EIGHTH,
+    });
   }
   return { bass, lead };
 }
@@ -65,7 +83,7 @@ export function barNotes(bar: number, rng: () => number): Bar {
 const CATCHUP_OFFSET = 0.05;
 
 export interface BarSchedule {
-  times: number[];   // absolute start times for the bars to queue now
+  times: number[]; // absolute start times for the bars to queue now
   nextBarAt: number; // where the scheduler resumes on its next wake
 }
 
@@ -80,7 +98,10 @@ export interface BarSchedule {
  * bars instead of replaying them into the past.
  */
 export function barsToSchedule(
-  nextBarAt: number, currentTime: number, ahead: number, barSeconds: number = BAR_SECONDS,
+  nextBarAt: number,
+  currentTime: number,
+  ahead: number,
+  barSeconds: number = BAR_SECONDS,
 ): BarSchedule {
   if (barSeconds <= 0) return { times: [], nextBarAt }; // never spin on a bad tempo
   let next = nextBarAt < currentTime ? currentTime + CATCHUP_OFFSET : nextBarAt;

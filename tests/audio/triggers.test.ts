@@ -5,8 +5,13 @@ import type { Inventory } from '../../src/types';
 
 afterEach(() => resetConfig());
 
-const inv = (over: Partial<Inventory> = {}): Inventory =>
-  ({ food: 100, water: 100, poop: 0, pee: 0, ...over });
+const inv = (over: Partial<Inventory> = {}): Inventory => ({
+  food: 100,
+  water: 100,
+  poop: 0,
+  pee: 0,
+  ...over,
+});
 
 describe('WarningTracker', () => {
   it('stays silent while everything is healthy', () => {
@@ -26,14 +31,14 @@ describe('WarningTracker', () => {
   it('does not re-arm on a twitch back over the line', () => {
     const t = new WarningTracker();
     t.check(inv({ food: config.WARN_FOOD_LOW }));
-    t.check(inv({ food: config.WARN_FOOD_LOW + 0.5 }));   // barely recovered — not enough
+    t.check(inv({ food: config.WARN_FOOD_LOW + 0.5 })); // barely recovered — not enough
     expect(t.check(inv({ food: config.WARN_FOOD_LOW }))).toEqual([]);
   });
 
   it('re-arms after a real recovery and warns again', () => {
     const t = new WarningTracker();
     t.check(inv({ food: config.WARN_FOOD_LOW }));
-    t.check(inv({ food: config.WARN_FOOD_LOW * 1.5 }));   // properly fed again
+    t.check(inv({ food: config.WARN_FOOD_LOW * 1.5 })); // properly fed again
     expect(t.check(inv({ food: config.WARN_FOOD_LOW }))).toEqual(['warnFood']);
   });
 

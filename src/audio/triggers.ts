@@ -30,7 +30,9 @@ export class WarningTracker {
   /** The warnings that fire on this tick — usually none. */
   check(inv: Inventory): WarningName[] {
     const out: WarningName[] = [];
-    const food = config.WARN_FOOD_LOW, water = config.WARN_WATER_LOW, pee = config.WARN_PEE_HIGH;
+    const food = config.WARN_FOOD_LOW,
+      water = config.WARN_WATER_LOW,
+      pee = config.WARN_PEE_HIGH;
     this.evaluate('warnFood', inv.food <= food, inv.food > food * (1 + REARM_MARGIN), out);
     this.evaluate('warnWater', inv.water <= water, inv.water > water * (1 + REARM_MARGIN), out);
     this.evaluate('warnPee', inv.pee >= pee, inv.pee < pee * (1 - REARM_MARGIN), out);
@@ -46,7 +48,8 @@ export class WarningTracker {
  * no longer does anything — correctly makes no sound.
  */
 export function risingEdges<T extends string>(
-  prev: Readonly<Record<T, boolean>>, now: Readonly<Record<T, boolean>>,
+  prev: Readonly<Record<T, boolean>>,
+  now: Readonly<Record<T, boolean>>,
 ): T[] {
   return (Object.keys(now) as T[]).filter((k) => now[k] && !prev[k]);
 }

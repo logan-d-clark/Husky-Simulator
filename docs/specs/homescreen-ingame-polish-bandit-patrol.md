@@ -1,4 +1,5 @@
 <!-- spec-version: 10.18.2 -->
+
 # Spec: Home-Screen & In-Game Polish + Bandit Patrol AI
 
 **Format:** dev-team specs v10.18.2
@@ -33,23 +34,23 @@ these):
    larger yard and returning to the street — until a scent catches his nose, at
    which point he speeds back to full and beelines for the food. A **Dev-settings
    toggle** switches Bandit between this new advanced patrol mode (default) and
-   his original "find the most valuable food anywhere and go for it" *omniscient*
+   his original "find the most valuable food anywhere and go for it" _omniscient_
    algorithm, reserved for a future harder difficulty.
 
 ## Architecture Specification
 
 **Components affected**
 
-| Slice | Component | Change |
-| --- | --- | --- |
-| A | `src/scenes/MenuScene.ts` | Strengthen text contrast (shadow/stroke/backing); swap flanking dogs to new menu SVGs; fix control hit areas so visible bounds == hit bounds. |
-| A | `src/scenes/PreloadScene.ts` | Load the two new menu-only dog SVGs via the existing `load.svg` path. |
-| A | `src/assets/menu-husky.svg`, `src/assets/menu-chi.svg` (new) | Hand-authored higher-fidelity dog art, home-screen only. |
-| B | `src/assets/treat.png`, `bowl.png`, `bag.png` | Restore transparency (re-export RGBA with the opaque background made transparent), preserving the pixel-art look. |
-| B | `src/scenes/UIScene.ts` | Move timer to header row at `x = CS_X` (Current Space left edge), same `y` as score; reduce Food→Water row gap so the Blizzard section matches the Current Space section's vertical extent. |
-| C | `src/systems/AISystem.ts` | Street-biased patrol; expose whether a move is a patrol step vs a chase step; mode selection (advanced vs omniscient). Stays Phaser-free and unit-tested. |
-| C | `src/scenes/GameScene.ts` | Set the Bandit tween duration from the patrol/chase signal (patrol = 2× duration = half speed); read the Bandit-mode flag live. |
-| C | `src/ui/DevPanel.ts` + runtime flag | A boolean "Bandit: omniscient" toggle (default off) read live by the AI. |
+| Slice | Component                                                    | Change                                                                                                                                                                                      |
+| ----- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A     | `src/scenes/MenuScene.ts`                                    | Strengthen text contrast (shadow/stroke/backing); swap flanking dogs to new menu SVGs; fix control hit areas so visible bounds == hit bounds.                                               |
+| A     | `src/scenes/PreloadScene.ts`                                 | Load the two new menu-only dog SVGs via the existing `load.svg` path.                                                                                                                       |
+| A     | `src/assets/menu-husky.svg`, `src/assets/menu-chi.svg` (new) | Hand-authored higher-fidelity dog art, home-screen only.                                                                                                                                    |
+| B     | `src/assets/treat.png`, `bowl.png`, `bag.png`                | Restore transparency (re-export RGBA with the opaque background made transparent), preserving the pixel-art look.                                                                           |
+| B     | `src/scenes/UIScene.ts`                                      | Move timer to header row at `x = CS_X` (Current Space left edge), same `y` as score; reduce Food→Water row gap so the Blizzard section matches the Current Space section's vertical extent. |
+| C     | `src/systems/AISystem.ts`                                    | Street-biased patrol; expose whether a move is a patrol step vs a chase step; mode selection (advanced vs omniscient). Stays Phaser-free and unit-tested.                                   |
+| C     | `src/scenes/GameScene.ts`                                    | Set the Bandit tween duration from the patrol/chase signal (patrol = 2× duration = half speed); read the Bandit-mode flag live.                                                             |
+| C     | `src/ui/DevPanel.ts` + runtime flag                          | A boolean "Bandit: omniscient" toggle (default off) read live by the AI.                                                                                                                    |
 
 **Constraints**
 
@@ -70,12 +71,12 @@ these):
 
 **Root-cause notes**
 
-- *Food black background* — confirmed: `treat/bowl/bag.png` are PNG color-type 0
+- _Food black background_ — confirmed: `treat/bowl/bag.png` are PNG color-type 0
   (grayscale, **no alpha channel**), so they draw as opaque boxes. Fix restores
   an alpha channel; the transparent SVG variants still exist as a fallback
   reference but the pixel-art PNG appearance is retained.
-- *Button hit-area offset* — the container `setInteractive(Rectangle(-w/2,-h/2,
-  w,h), Contains)` math is correct in isolation, so the offset is a subtler
+- _Button hit-area offset_ — the container `setInteractive(Rectangle(-w/2,-h/2,
+w,h), Contains)` math is correct in isolation, so the offset is a subtler
   input hit-area/transform interaction to be reproduced (click-through test) and
   root-caused during build; the acceptance test is behavioral (visible bounds ==
   hit bounds).
@@ -138,20 +139,21 @@ these):
 
 ## Ambiguity Log
 
-| Decision | Classification | Resolved By | Rationale / Answer |
-|----------|---------------|-------------|-------------------|
-| Ship as 3 thematic PRs vs one | `requires-stakeholder-input` | human | Answered up front: 3 thematic PRs (home-screen / HUD+food / Bandit AI), sequential. |
-| Home-screen dog art format (procedural vs SVG vs pixel PNG) | `requires-stakeholder-input` | human | Answered up front: hand-authored SVG art. |
-| Food black-background fix approach | `inferable` | inference | PNGs are color-type 0 (no alpha) → restore transparency while keeping pixel-art look, rather than switching art style back to the SVGs the user deliberately replaced in PR #13. |
-| Contrast-fix mechanism | `inferable` | inference | Strengthen legibility via shadow/stroke/backing (title already uses a shadow); exact styling is presentation detail, judged against the "clearly legible" bar. |
-| "Half speed" reference point | `inferable` | inference | Half of Bandit's normal difficulty-adjusted speed → patrol tween duration = 2× the chase duration. |
-| Precise "cohesive street-search" algorithm | `inferable` | inference | Behavioral bar only (mostly-pavement, non-jittery, occasional yard dip then return); exact heuristic/tuning is implementation detail validated against AC-C2. |
-| Dev-toggle storage & UX | `inferable` | inference | "Toggleable in Dev settings" → a boolean toggle in the DevPanel backed by a separate boolean flag (kept out of the numeric config serialize/profiles), read live. |
-| Omniscient mode's other behaviors | `inferable` | inference | Keep thirst/eating/affection; only the food-targeting changes (global best, no smell gate, full speed); patrol only when no food exists. |
-| Omniscient → difficulty wiring | `inferable` | inference | User stated it's future ("at some point"); explicitly out of scope now — dev toggle only. |
-| Whether in-game sprites also change | `inferable` | inference | User said "home-screen-only" → in-game sprites untouched. |
+| Decision                                                    | Classification               | Resolved By | Rationale / Answer                                                                                                                                                               |
+| ----------------------------------------------------------- | ---------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ship as 3 thematic PRs vs one                               | `requires-stakeholder-input` | human       | Answered up front: 3 thematic PRs (home-screen / HUD+food / Bandit AI), sequential.                                                                                              |
+| Home-screen dog art format (procedural vs SVG vs pixel PNG) | `requires-stakeholder-input` | human       | Answered up front: hand-authored SVG art.                                                                                                                                        |
+| Food black-background fix approach                          | `inferable`                  | inference   | PNGs are color-type 0 (no alpha) → restore transparency while keeping pixel-art look, rather than switching art style back to the SVGs the user deliberately replaced in PR #13. |
+| Contrast-fix mechanism                                      | `inferable`                  | inference   | Strengthen legibility via shadow/stroke/backing (title already uses a shadow); exact styling is presentation detail, judged against the "clearly legible" bar.                   |
+| "Half speed" reference point                                | `inferable`                  | inference   | Half of Bandit's normal difficulty-adjusted speed → patrol tween duration = 2× the chase duration.                                                                               |
+| Precise "cohesive street-search" algorithm                  | `inferable`                  | inference   | Behavioral bar only (mostly-pavement, non-jittery, occasional yard dip then return); exact heuristic/tuning is implementation detail validated against AC-C2.                    |
+| Dev-toggle storage & UX                                     | `inferable`                  | inference   | "Toggleable in Dev settings" → a boolean toggle in the DevPanel backed by a separate boolean flag (kept out of the numeric config serialize/profiles), read live.                |
+| Omniscient mode's other behaviors                           | `inferable`                  | inference   | Keep thirst/eating/affection; only the food-targeting changes (global best, no smell gate, full speed); patrol only when no food exists.                                         |
+| Omniscient → difficulty wiring                              | `inferable`                  | inference   | User stated it's future ("at some point"); explicitly out of scope now — dev toggle only.                                                                                        |
+| Whether in-game sprites also change                         | `inferable`                  | inference   | User said "home-screen-only" → in-game sprites untouched.                                                                                                                        |
 
 ## Consistency Gate
+
 - [x] Intent is unambiguous
 - [x] Every behavior/goal maps to an acceptance criterion
 - [x] Architecture constrains without over-engineering

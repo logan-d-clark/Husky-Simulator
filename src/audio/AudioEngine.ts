@@ -9,7 +9,7 @@ import { barNotes, barsToSchedule, mulberry32 } from './music';
 // here is logic that cannot be tested. Every method no-ops without an
 // AudioContext, so importing this module is always safe.
 
-const LOOKAHEAD_MS = 250;   // how often the scheduler wakes
+const LOOKAHEAD_MS = 250; // how often the scheduler wakes
 // Must comfortably exceed the ~1s timer floor a background tab imposes, or a
 // throttled wake lands after the bar it was meant to queue.
 const SCHEDULE_AHEAD = 1.5; // seconds of music queued in advance
@@ -27,9 +27,11 @@ export class AudioEngine {
 
   private ensure(): boolean {
     if (this.ctx) return true;
-    const Ctor = typeof window === 'undefined'
-      ? undefined
-      : window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    const Ctor =
+      typeof window === 'undefined'
+        ? undefined
+        : (window.AudioContext ??
+          (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext);
     if (!Ctor) return false;
     this.ctx = new Ctor();
     this.master = this.ctx.createGain();
@@ -57,7 +59,9 @@ export class AudioEngine {
     if (this.ctx.state === 'suspended') void this.ctx.resume();
   }
 
-  isMuted(): boolean { return this.muted; }
+  isMuted(): boolean {
+    return this.muted;
+  }
 
   toggleMute(): boolean {
     this.muted = !this.muted;

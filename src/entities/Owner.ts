@@ -15,5 +15,7 @@ export class Owner {
     this.name = d.name;
   }
 
-  get treatRateActive(): number { return this.treatRateBase * (this.affection / 25); }
+  get treatRateActive(): number {
+    return this.treatRateBase * (this.affection / 25);
+  }
 }

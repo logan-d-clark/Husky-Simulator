@@ -1,7 +1,15 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import {
-  emptyCounts, itemDropChance, milestoneCount, randomItemType,
-  grant, consume, repellerBlocks, milestonesToGrant, nextTutorial, tickRepellers,
+  emptyCounts,
+  itemDropChance,
+  milestoneCount,
+  randomItemType,
+  grant,
+  consume,
+  repellerBlocks,
+  milestonesToGrant,
+  nextTutorial,
+  tickRepellers,
   type Repeller,
 } from '../../src/systems/ItemSystem';
 import { ITEM_TYPES, ITEMS, itemForKey, type ItemType } from '../../src/entities/Item';
@@ -50,9 +58,9 @@ describe('itemDropChance', () => {
     // pinning one number — a retune that breaks the goal fails here.
     const ticks = 20 * 60 * TICKS_PER_SECOND;
     const expected = (food: number) => itemDropChance(food) * ticks;
-    expect(expected(50)).toBeGreaterThan(2);      // even a poor round contributes
-    expect(expected(800)).toBeGreaterThan(5);     // a normal one clears the bar alone
-    expect(expected(2400)).toBeLessThan(15);      // ...without becoming a firehose
+    expect(expected(50)).toBeGreaterThan(2); // even a poor round contributes
+    expect(expected(800)).toBeGreaterThan(5); // a normal one clears the bar alone
+    expect(expected(2400)).toBeLessThan(15); // ...without becoming a firehose
   });
 });
 
@@ -146,7 +154,7 @@ describe('repellerBlocks', () => {
   it('still honours the OTHER repellers while he stands in one', () => {
     const blocked = repellerBlocks([rep(10, 10), rep(30, 10)], at(10, 10));
     expect(blocked(at(11, 10))).toBe(false); // the one he is in
-    expect(blocked(at(30, 10))).toBe(true);  // the distant one still bites
+    expect(blocked(at(30, 10))).toBe(true); // the distant one still bites
   });
 
   it('follows a dev-panel radius change', () => {
