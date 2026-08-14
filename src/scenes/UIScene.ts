@@ -3,7 +3,7 @@ import { PALETTE } from '../config/palette';
 import { GRID, DESIGN_HEIGHT } from '../config/constants';
 import { config } from '../config/gameConfig';
 import { HUSKY_NAME, CHI_NAME } from '../config/names';
-import { tolerancePips, pipString, heatLabel, thresholdMarkerX } from '../ui/indicators';
+import { tolerancePips, pipString, heatLabel, thresholdMarkerX, formatClock } from '../ui/indicators';
 import type { GameScene } from './GameScene';
 import { ITEMS, ITEM_TYPES } from '../entities/Item';
 
@@ -50,8 +50,18 @@ const FOOD_THRESHOLDS = [
 ] as const;
 const AFFECTION_BAR_Y = 121,
   AFFECTION_ICON_Y = 150;
-// Four item slots across Blizzard's 346-wide card.
+// Four item slots across Blizzard's 346-wide card. Each is drawn as a pill so
+// the hotkey, icon and count read as one unit instead of three loose glyphs.
 const ITEM_SLOT_W = 82;
+const PILL_W = 74,
+  PILL_H = 21,
+  PILL_R = 10,
+  PILL_DY = -2;
+// While Bandit is penned his stats are frozen by design, so the card shows the
+// only fact that matters: when he gets out.
+const PENNED_CX = BANDIT_CARD_X + BANDIT_CARD_W / 2;
+// Hoisted: create() and update() both draw with it.
+const CREAM = Phaser.Display.Color.HexStringToColor(PALETTE.hudText).color;
 
 export class UIScene extends Phaser.Scene {
   private g!: Phaser.GameObjects.Graphics;
@@ -65,7 +75,6 @@ export class UIScene extends Phaser.Scene {
   create() {
     const y0 = DESIGN_HEIGHT;
     const W = GRID.COLS * GRID.TILE;
-    const cream = Phaser.Display.Color.HexStringToColor(PALETTE.hudText).color;
 
     // Panel: warm dark card + summer-orange accent line. Drawn once.
     const panel = this.add.graphics();
@@ -74,7 +83,7 @@ export class UIScene extends Phaser.Scene {
     // Blizzard and Current Space each get their own matching inset card.
     const card = (x: number, w: number) => {
       panel.fillStyle(0xffffff, 0.05).fillRoundedRect(x, y0 + 30, w, HUD_H - 42, 10);
-      panel.lineStyle(1, cream, 0.15).strokeRoundedRect(x, y0 + 30, w, HUD_H - 42, 10);
+      panel.lineStyle(1, CREAM, 0.15).strokeRoundedRect(x, y0 + 30, w, HUD_H - 42, 10);
     };
     card(12, 346); // Blizzard
     card(BANDIT_CARD_X, BANDIT_CARD_W); // Bandit (rival — dimmer)
@@ -116,7 +125,7 @@ export class UIScene extends Phaser.Scene {
     // is the number key, the item's sprite, and how many he is carrying.
     ITEM_TYPES.forEach((type, i) => {
       const x = LEFT_X + i * ITEM_SLOT_W;
-      this.add.text(x, y0 + ROW(4) + 2, ITEMS[type].key, {
+      this.texts[`key-${type}`] = this.add.text(x, y0 + ROW(4) + 2, ITEMS[type].key, {
         color: '#ffd27f',
         fontSize: '12px',
         fontStyle: 'bold',
@@ -133,6 +142,13 @@ export class UIScene extends Phaser.Scene {
     mk('bPoop', BANDIT_X, y0 + ROW(2), '15px', 0, BANDIT_DIM);
     mk('bPee', BANDIT_X, y0 + ROW(3), '15px', 0, BANDIT_DIM);
     mk('bGoal', BANDIT_X, y0 + ROW(4), '14px', 0, BANDIT_GOAL); // which of his three modes he's in
+    // The penned presentation. Hidden whenever he is loose; see update().
+    this.texts.bPennedLabel = this.add
+      .text(PENNED_CX, y0 + 74, 'Leaves the yard in:', { color: BANDIT_DIM, fontSize: '15px' })
+      .setOrigin(0.5, 0);
+    this.texts.bPennedTime = this.add
+      .text(PENNED_CX, y0 + 100, '', { color: '#ffd27f', fontSize: '40px', fontStyle: 'bold' })
+      .setOrigin(0.5, 0);
     // right zone (Current Space) — sub-column A
     mk('owner', CS_A, y0 + 58, '15px');
     mk('tolL', CS_A, y0 + 88);
@@ -187,52 +203,74 @@ export class UIScene extends Phaser.Scene {
     this.texts.waterL.setText(`💧 Water ${s.water.toFixed(0)}`);
     this.texts.poopL.setText(`💩 Poop ${s.poop.toFixed(0)}`);
     this.texts.peeL.setText(`🟡 Pee ${s.pee.toFixed(0)}`);
-    // Item belt: dim a slot he can't use, so the row reads at a glance.
-    for (const type of ITEM_TYPES) {
+    // Item belt. Each slot gets a pill behind it so its hotkey, icon and count
+    // read as one unit rather than three loose glyphs. `this.g` is created
+    // before the icons and labels in create(), so the pill lands behind them
+    // without any depth juggling. A slot he can't use is dimmed, pill included.
+    ITEM_TYPES.forEach((type, i) => {
       const n = s.items[type] ?? 0;
-      this.texts[`item-${type}`].setText(`${n}`).setColor(n > 0 ? PALETTE.hudText : '#6b6055');
-      this.itemIcons[type].setAlpha(n > 0 ? 1 : 0.3);
+      const has = n > 0;
+      this.g
+        .fillStyle(0xffffff, has ? 0.1 : 0.04)
+        .fillRoundedRect(LEFT_X + i * ITEM_SLOT_W - 4, y0 + ROW(4) + PILL_DY, PILL_W, PILL_H, PILL_R);
+      this.g
+        .lineStyle(1, CREAM, has ? 0.28 : 0.12)
+        .strokeRoundedRect(LEFT_X + i * ITEM_SLOT_W - 4, y0 + ROW(4) + PILL_DY, PILL_W, PILL_H, PILL_R);
+      this.texts[`item-${type}`].setText(`${n}`).setColor(has ? PALETTE.hudText : '#6b6055');
+      this.texts[`key-${type}`].setAlpha(has ? 1 : 0.4);
+      this.itemIcons[type].setAlpha(has ? 1 : 0.3);
+    });
+
+    // Bandit's card has two presentations. Visibility is set on BOTH paths
+    // every frame rather than toggled on transition, so there is no state to
+    // get stuck in — a row hidden by one branch is always re-shown by the other.
+    const banditStats = ['bFood', 'bWater', 'bPoop', 'bPee', 'bGoal'];
+    for (const k of banditStats) this.texts[k].setVisible(!s.chiPenned);
+    this.texts.bPennedLabel.setVisible(s.chiPenned);
+    this.texts.bPennedTime.setVisible(s.chiPenned);
+
+    if (s.chiPenned) {
+      // Penned: his needs are frozen by design, so four flat bars would say
+      // nothing. The one fact worth the space is when he gets out.
+      this.texts.bPennedTime.setText(formatClock(s.chiPennedSeconds));
+    } else {
+      const n0 = (v: number) => Math.max(0, v).toFixed(0); // never show a transient "-0"
+      bar(
+        BANDIT_BAR,
+        y0 + ROW(1) + BAR_DY,
+        s.chiWater,
+        config.WATER_CAP,
+        PALETTE.water,
+        BANDIT_BAR_W,
+        BANDIT_BAR_ALPHA,
+      );
+      bar(
+        BANDIT_BAR,
+        y0 + ROW(2) + BAR_DY,
+        s.chiPoop,
+        config.POOP_MAX,
+        PALETTE.fence,
+        BANDIT_BAR_W,
+        BANDIT_BAR_ALPHA,
+      );
+      bar(
+        BANDIT_BAR,
+        y0 + ROW(3) + BAR_DY,
+        s.chiPee,
+        config.PEE_MAX,
+        PALETTE.affection,
+        BANDIT_BAR_W,
+        BANDIT_BAR_ALPHA,
+      );
+      this.texts.bFood.setText(`🍖 Food ${n0(s.chiFood)}`);
+      this.texts.bWater.setText(`💧 Water ${n0(s.chiWater)}`);
+      this.texts.bPoop.setText(`💩 Poop ${n0(s.chiPoop)}`);
+      this.texts.bPee.setText(`🟡 Pee ${n0(s.chiPee)}`);
+      this.texts.bGoal.setText(s.chiGoalLabel);
     }
 
-    // Bandit (rival) — same stats as Blizzard, dimmer bars/text.
-    bar(
-      BANDIT_BAR,
-      y0 + ROW(1) + BAR_DY,
-      s.chiWater,
-      config.WATER_CAP,
-      PALETTE.water,
-      BANDIT_BAR_W,
-      BANDIT_BAR_ALPHA,
-    );
-    bar(
-      BANDIT_BAR,
-      y0 + ROW(2) + BAR_DY,
-      s.chiPoop,
-      config.POOP_MAX,
-      PALETTE.fence,
-      BANDIT_BAR_W,
-      BANDIT_BAR_ALPHA,
-    );
-    bar(
-      BANDIT_BAR,
-      y0 + ROW(3) + BAR_DY,
-      s.chiPee,
-      config.PEE_MAX,
-      PALETTE.affection,
-      BANDIT_BAR_W,
-      BANDIT_BAR_ALPHA,
-    );
-    const n0 = (v: number) => Math.max(0, v).toFixed(0); // never show a transient "-0"
-    this.texts.bFood.setText(`🍖 Food ${n0(s.chiFood)}`);
-    this.texts.bWater.setText(`💧 Water ${n0(s.chiWater)}`);
-    this.texts.bPoop.setText(`💩 Poop ${n0(s.chiPoop)}`);
-    this.texts.bPee.setText(`🟡 Pee ${n0(s.chiPee)}`);
-    this.texts.bGoal.setText(s.chiGoalLabel);
-
     // Header
-    const mm = Math.floor(s.secondsLeft / 60),
-      ss = s.secondsLeft % 60;
-    this.texts.timer.setText(`⏰ ${mm}:${ss.toString().padStart(2, '0')}`);
+    this.texts.timer.setText(`⏰ ${formatClock(s.secondsLeft)}`);
     this.texts.score.setText(
       `🐺 ${HUSKY_NAME} ${s.huskyFood.toFixed(0)}     🐕 ${CHI_NAME} ${s.chiFood.toFixed(0)}`,
     );

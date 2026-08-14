@@ -32,3 +32,17 @@ export function thresholdMarkerX(threshold: number, barLeft: number, barWidth: n
 export function heatLabel(heat: number): 'Low' | 'High' {
   return heat >= config.HEAT_PAVEMENT ? 'High' : 'Low';
 }
+
+// Seconds as M:SS. Shared by the round clock and the penned-Bandit countdown so
+// the padding arithmetic exists once.
+//
+// The negative clamp is unconditional defence, not a frame anyone has observed:
+// today both callers stop at zero on their own (advanceGateSeconds opens the
+// gate at <= 0, shouldEndGame ends the round at <= 0), so the lowest value ever
+// rendered is "0:01". It is here so a future caller cannot put "-1:-5" on screen.
+export function formatClock(seconds: number): string {
+  const total = Math.max(0, Math.floor(seconds));
+  const mm = Math.floor(total / 60);
+  const ss = total % 60;
+  return `${mm}:${ss.toString().padStart(2, '0')}`;
+}

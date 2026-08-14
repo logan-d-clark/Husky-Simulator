@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { tolerancePips, pipString, heatLabel, thresholdMarkerX, TOLERANCE_MAX } from '../src/ui/indicators';
+import {
+  tolerancePips,
+  pipString,
+  heatLabel,
+  thresholdMarkerX,
+  formatClock,
+  TOLERANCE_MAX,
+} from '../src/ui/indicators';
 import { DEFAULTS } from '../src/config/gameConfig';
 
 const HEAT_GRASS = DEFAULTS.HEAT_GRASS;
@@ -67,5 +74,33 @@ describe('thresholdMarkerX', () => {
 
   it('respects a bar that does not start at the origin', () => {
     expect(thresholdMarkerX(50, 0, WIDTH)).toBe(WIDTH / 2);
+  });
+});
+
+describe('formatClock', () => {
+  it('pads the seconds to two digits', () => {
+    expect(formatClock(0)).toBe('0:00');
+    expect(formatClock(9)).toBe('0:09');
+    expect(formatClock(59)).toBe('0:59');
+  });
+
+  it('rolls over into minutes', () => {
+    expect(formatClock(60)).toBe('1:00');
+    expect(formatClock(61)).toBe('1:01');
+    expect(formatClock(155)).toBe('2:35'); // the example from the spec
+  });
+
+  it('keeps counting past ten minutes without truncating', () => {
+    expect(formatClock(20 * 60)).toBe('20:00');
+    expect(formatClock(20 * 60 + 7)).toBe('20:07');
+  });
+
+  it('floors a fractional second rather than rendering a decimal', () => {
+    expect(formatClock(65.9)).toBe('1:05');
+  });
+
+  it('clamps a negative to zero rather than rendering -1:-5', () => {
+    expect(formatClock(-1)).toBe('0:00');
+    expect(formatClock(-125)).toBe('0:00');
   });
 });

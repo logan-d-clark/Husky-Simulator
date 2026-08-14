@@ -100,7 +100,12 @@ export class GameScene extends Phaser.Scene {
   private tutorialQueue: ItemType[] = [];
   private tutorialShowing = false;
   private milestonesPaid = 0; // highest 1000-food milestone already granted
-  private rawhide: { tile: TileCoord; secondsLeft: number; sprite: Phaser.GameObjects.Image } | null = null;
+  private rawhide: {
+    tile: TileCoord;
+    secondsLeft: number;
+    sprite: Phaser.GameObjects.Image;
+    label: Phaser.GameObjects.Text;
+  } | null = null;
   private repellers: (Repeller & {
     sprite: Phaser.GameObjects.Image;
     ring: Phaser.GameObjects.Graphics;
@@ -246,6 +251,10 @@ export class GameScene extends Phaser.Scene {
     // over it), and one dropped in sight shows through the fog for the rest of
     // the round.
     for (const i of this.itemPickups) i.sprite.setVisible(fov.has(this.fkey(i.tile.col, i.tile.row)));
+    // The rawhide's countdown reports BANDIT's state, so it hides with him.
+    // Re-derived here as well as on the item tick so it tracks Blizzard moving
+    // rather than lagging up to a second behind him.
+    this.rawhide?.label.setVisible(this.rawhideLabelVisible());
     this.chiSprite.setVisible(fov.has(`${this.chihuahua.tile.col},${this.chihuahua.tile.row}`));
   }
 
@@ -266,6 +275,10 @@ export class GameScene extends Phaser.Scene {
         this.banditController.currentGoal(),
         this.banditController.activeChannel(),
       ),
+      // Read straight off the gate's own clock rather than a mirrored copy, so
+      // the number on screen cannot drift from the moment he actually gets out.
+      chiPenned: this.gateShut(),
+      chiPennedSeconds: this.gateSecondsLeft,
       items: { ...this.items },
       currentTile: { heat: t.heat, dirt: t.dirt, destruction: t.destruction, ownerId: t.ownerId },
     };
@@ -735,6 +748,28 @@ export class GameScene extends Phaser.Scene {
     return repellerBlocks(this.repellers, this.chihuahua.tile);
   }
 
+  /** Whether the rawhide's countdown may be shown: only while he is actually
+   *  chewing, AND only if Blizzard can see the tile. The sprite stays visible
+   *  regardless — he placed it, so he knows where it is — but the countdown
+   *  reports BANDIT's state, and on Blizzlord the fog exists precisely to
+   *  withhold where the rival is and what he is doing. */
+  private rawhideLabelVisible(): boolean {
+    if (!this.rawhide) return false;
+    const t = this.rawhide.tile;
+    // A tile compare, deliberately not rawhideState() — that runs a full BFS for
+    // reachability, and this is called on every one of Blizzard's moves.
+    const onIt = this.chihuahua.tile.col === t.col && this.chihuahua.tile.row === t.row;
+    return onIt && (!this.fovSet || this.fovSet.has(this.fkey(t.col, t.row)));
+  }
+
+  /** Remove the deployed rawhide and everything drawn with it. Every removal
+   *  path goes through here so the label can never outlive its sprite. */
+  private clearRawhide() {
+    this.rawhide?.sprite.destroy();
+    this.rawhide?.label.destroy();
+    this.rawhide = null;
+  }
+
   /** What the controller needs to know about a deployed rawhide, or null. */
   private rawhideState(): { reachable: boolean; onIt: boolean } | null {
     if (!this.rawhide) return null;
@@ -760,11 +795,17 @@ export class GameScene extends Phaser.Scene {
     const tile = { ...this.husky.tile };
     const p = this.grid.tileToPixel(tile);
     if (type === 'rawhide') {
-      this.rawhide?.sprite.destroy(); // only one at a time; the newest wins
+      this.clearRawhide(); // only one at a time; the newest wins
       this.rawhide = {
         tile,
         secondsLeft: config.RAWHIDE_EAT_SECONDS,
         sprite: this.add.image(p.x, p.y, 'rawhide').setDepth(8),
+        // Hidden until he actually starts chewing: the clock does not run while
+        // he is still walking over, so a number now would be a lie.
+        label: this.add
+          .text(p.x + 10, p.y - 18, '', { fontSize: '12px', color: '#f2e7cb' })
+          .setDepth(9)
+          .setVisible(false),
       };
     } else if (type === 'repeller') {
       const radius = config.REPELLER_RADIUS * GRID.TILE;
@@ -794,11 +835,17 @@ export class GameScene extends Phaser.Scene {
   /** One second of item upkeep: countdowns, expiry, zoomies. */
   private itemSecondTick() {
     if (this.rawhide) {
-      // Only counts down while he is actually chewing it.
-      const onIt = this.rawhideState()?.onIt;
-      if (onIt && --this.rawhide.secondsLeft <= 0) {
-        this.rawhide.sprite.destroy();
-        this.rawhide = null; // controller hands his interrupted mode back
+      // Only counts down while he is actually chewing it, and the label is
+      // driven by that same condition so it shows exactly when the clock runs.
+      const onIt = this.rawhideState()?.onIt ?? false;
+      this.rawhide.label.setVisible(this.rawhideLabelVisible());
+      if (onIt) {
+        this.rawhide.secondsLeft -= 1;
+        if (this.rawhide.secondsLeft <= 0) {
+          this.clearRawhide(); // controller hands his interrupted mode back
+        } else {
+          this.rawhide.label.setText(`${this.rawhide.secondsLeft}`);
+        }
       }
     }
     const { alive, expired } = tickRepellers(this.repellers);
