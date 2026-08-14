@@ -16,9 +16,18 @@ const game = new Phaser.Game({
   parent: 'game',
   backgroundColor: '#1a1a1a',
   width: DESIGN_WIDTH,
-  height: DESIGN_HEIGHT + HUD_H,      // + HUD strip
+  height: DESIGN_HEIGHT + HUD_H, // + HUD strip
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  scene: [BootScene, PreloadScene, MenuScene, InstructionsScene, GameScene, UIScene, GameOverScene, ItemInfoScene],
+  scene: [
+    BootScene,
+    PreloadScene,
+    MenuScene,
+    InstructionsScene,
+    GameScene,
+    UIScene,
+    GameOverScene,
+    ItemInfoScene,
+  ],
 });
 
 // Debug handles: expose the running game and audio engine for console/automation

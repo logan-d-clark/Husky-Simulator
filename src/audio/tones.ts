@@ -6,11 +6,11 @@
 export type Wave = 'sine' | 'square' | 'triangle' | 'sawtooth';
 
 export interface ToneStep {
-  freq: number;  // Hz; 0 is a rest
-  dur: number;   // seconds
+  freq: number; // Hz; 0 is a rest
+  dur: number; // seconds
   wave: Wave;
-  gain: number;  // 0..1, relative to the channel's own volume
-  at?: number;   // seconds from the start of the phrase (default: sequential)
+  gain: number; // 0..1, relative to the channel's own volume
+  at?: number; // seconds from the start of the phrase (default: sequential)
 }
 
 /** Equal-temperament frequency of a MIDI note number (69 = A4 = 440Hz). */
@@ -39,7 +39,8 @@ export function placePhrase(steps: readonly ToneStep[], startAt: number): Placed
   for (const s of steps) {
     const offset = s.at ?? cursor;
     if (s.at === undefined) cursor += s.dur;
-    if (s.freq > 0) out.push({ start: startAt + offset, freq: s.freq, dur: s.dur, wave: s.wave, gain: s.gain });
+    if (s.freq > 0)
+      out.push({ start: startAt + offset, freq: s.freq, dur: s.dur, wave: s.wave, gain: s.gain });
   }
   return out;
 }

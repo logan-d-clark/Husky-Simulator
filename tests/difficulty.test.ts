@@ -42,18 +42,14 @@ describe('difficulty registry', () => {
     expect(getDifficultySettings(undefined as unknown as Difficulty)).toEqual(
       DIFFICULTIES[DEFAULT_DIFFICULTY],
     );
-    expect(getDifficultySettings('impossible' as Difficulty)).toEqual(
-      DIFFICULTIES[DEFAULT_DIFFICULTY],
-    );
+    expect(getDifficultySettings('impossible' as Difficulty)).toEqual(DIFFICULTIES[DEFAULT_DIFFICULTY]);
   });
 });
 
 describe('banditDelaySeconds', () => {
   it('scales the live config base by the difficulty multiplier', () => {
     for (const d of ['puppy', 'husky', 'blizzlord'] as const) {
-      expect(banditDelaySeconds(d)).toBe(
-        config.BANDIT_DELAY_SECONDS * DIFFICULTIES[d].banditDelayMultiplier,
-      );
+      expect(banditDelaySeconds(d)).toBe(config.BANDIT_DELAY_SECONDS * DIFFICULTIES[d].banditDelayMultiplier);
     }
   });
 

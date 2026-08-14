@@ -64,14 +64,18 @@ export function nextTutorial(seen: ReadonlySet<ItemType>, queued: readonly ItemT
   return queued.find((t) => !seen.has(t)) ?? null;
 }
 
-export interface Repeller { tile: TileCoord; secondsLeft: number }
+export interface Repeller {
+  tile: TileCoord;
+  secondsLeft: number;
+}
 
 /**
  * One second of repeller countdown: the survivors (decremented) and the ones
  * that just expired, so the caller can tear their sprites down.
  */
 export function tickRepellers<T extends Repeller>(repellers: readonly T[]): { alive: T[]; expired: T[] } {
-  const alive: T[] = [], expired: T[] = [];
+  const alive: T[] = [],
+    expired: T[] = [];
   for (const r of repellers) {
     r.secondsLeft -= 1;
     (r.secondsLeft > 0 ? alive : expired).push(r);
@@ -90,7 +94,8 @@ const withinRadius = (a: TileCoord, b: TileCoord, radius: number): boolean =>
  * where he stands — the item prevents him coming near, it does not cage him.
  */
 export function repellerBlocks(
-  repellers: readonly Repeller[], banditTile: TileCoord,
+  repellers: readonly Repeller[],
+  banditTile: TileCoord,
 ): (t: TileCoord) => boolean {
   const r = config.REPELLER_RADIUS;
   const active = repellers.filter((rep) => !withinRadius(banditTile, rep.tile, r));

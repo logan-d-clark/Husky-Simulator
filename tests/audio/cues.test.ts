@@ -7,9 +7,18 @@ const names = Object.keys(CUES) as CueName[];
 describe('cues', () => {
   it('covers every sound the game triggers', () => {
     expect(names.sort()).toEqual([
-      'banditRawhide', 'banditRelief', 'banditTreat', 'banditWater',
-      'drink', 'eat', 'pee', 'poop', 'trick',
-      'warnFood', 'warnPee', 'warnWater',
+      'banditRawhide',
+      'banditRelief',
+      'banditTreat',
+      'banditWater',
+      'drink',
+      'eat',
+      'pee',
+      'poop',
+      'trick',
+      'warnFood',
+      'warnPee',
+      'warnWater',
     ]);
   });
 
@@ -19,7 +28,7 @@ describe('cues', () => {
       expect(steps.length, name).toBeGreaterThan(0);
       for (const s of steps) {
         expect(s.dur, name).toBeGreaterThan(0);
-        expect(s.freq, name).toBeGreaterThan(20);      // below this is inaudible rumble
+        expect(s.freq, name).toBeGreaterThan(20); // below this is inaudible rumble
         expect(s.freq, name).toBeLessThan(12000);
         expect(s.gain, name).toBeGreaterThan(0);
         expect(s.gain, name).toBeLessThanOrEqual(1);

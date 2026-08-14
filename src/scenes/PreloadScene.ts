@@ -3,7 +3,9 @@ import Phaser from 'phaser';
 const DIRS = ['up', 'down', 'left', 'right'] as const;
 
 export class PreloadScene extends Phaser.Scene {
-  constructor() { super('Preload'); }
+  constructor() {
+    super('Preload');
+  }
 
   preload() {
     const svg = (key: string, path: string, w: number, h: number) =>

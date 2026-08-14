@@ -22,6 +22,7 @@ web-deployable TypeScript game, preserving all existing gameplay while adding
 polish and several wishlist features.
 
 ### Goals
+
 1. Faithful, modular re-implementation retaining **all** V1 functionality and
    the exact map layout.
 2. A modernized visual + UI coat of paint (all-new cohesive art, better status
@@ -30,19 +31,20 @@ polish and several wishlist features.
    chihuahua adversary.
 
 ### Non-goals (this build)
+
 - Mobile/touch controls (noted as a clean future extension).
 - Sound/music and an options/settings menu (deferred to a later pass).
 
 ## 2. Decisions (locked)
 
-| Topic | Decision |
-|-------|----------|
-| Engine | **Phaser 3** + **TypeScript**, bundled with **Vite** |
-| Movement feel | **Smooth tween between tiles**, but logic stays **tile-discrete** (per-tile resource accounting preserved) |
-| Art | **All-new cohesive art**, authored as **flat/vector SVG** on a shared **warm-summer palette** |
+| Topic             | Decision                                                                                                                        |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Engine            | **Phaser 3** + **TypeScript**, bundled with **Vite**                                                                            |
+| Movement feel     | **Smooth tween between tiles**, but logic stays **tile-discrete** (per-tile resource accounting preserved)                      |
+| Art               | **All-new cohesive art**, authored as **flat/vector SVG** on a shared **warm-summer palette**                                   |
 | First-build scope | Faithful port **+** chihuahua AI **+** menus/game-over/play-again **+** household profile panels **+** auto-dump & polish TODOs |
-| Testing | **Vitest** unit tests on pure game-logic modules (TDD) |
-| Deployment | Static site to **GitHub Pages** via **GitHub Actions** |
+| Testing           | **Vitest** unit tests on pure game-logic modules (TDD)                                                                          |
+| Deployment        | Static site to **GitHub Pages** via **GitHub Actions**                                                                          |
 
 ## 3. Architecture
 
@@ -103,6 +105,7 @@ husky-simulator/
 ## 4. Simulation Model (faithful core)
 
 ### 4.1 Map & grid
+
 - Grid is **26 rows × 48 columns** (unchanged).
 - `MapBlockIDs.csv` is copied to `src/data/map.csv` and **imported verbatim**
   (Vite `?raw`), then parsed. The layout the user carefully designed —
@@ -115,12 +118,13 @@ husky-simulator/
   preserving aspect ratio, so the exact layout is never distorted.
 
 ### 4.2 Fixed sim tick
+
 A **fixed 10 Hz simulation tick** (matching V1 `FPS = 10`) drives all game logic
 via a fixed-timestep accumulator (decoupled from Phaser's 60 fps render). Each
 tick:
+
 1. If a move is queued and the target tile is passable: **step** to the next
-   tile; apply move cost (food −`FOOD_RATE`, water −`WATER_RATE`; poop
-   +`FOOD_RATE`, pee +`WATER_RATE`).
+   tile; apply move cost (food −`FOOD_RATE`, water −`WATER_RATE`; poop +`FOOD_RATE`, pee +`WATER_RATE`).
 2. Apply **heat** of the current tile (water −heat; pee +heat). Applies even when
    standing still — preserving V1 behavior (pavement drains water while idle).
 3. If drinking and on/adjacent to water: water +`WATER_VALUE` (capped).
@@ -141,6 +145,7 @@ from V1 unchanged (`FOOD_RATE`, `WATER_RATE`, `TREAT_VALUE`, `WATER_VALUE`,
 `HEAT_GRASS`, `TIME_MAX`).
 
 ### 4.3 Movement & collision
+
 - Holding a direction queues continuous tile steps. On each sim tick, if the
   next tile in the facing direction is passable, the logic advances one tile and
   the sprite **tweens** across the gap over ~one tick interval, with the walk
@@ -151,6 +156,7 @@ from V1 unchanged (`FOOD_RATE`, `WATER_RATE`, `TREAT_VALUE`, `WATER_VALUE`,
   modeled as edges on the grid, derived from grass-block fence metadata.
 
 ### 4.4 Resources & game-over
+
 - Inventory: `food`, `water`, `poop`, `pee` (+ `dirt` retained if needed).
 - Food pickup: entering a tile that has a food object adds its value and removes
   the object.
@@ -188,6 +194,7 @@ from V1 unchanged (`FOOD_RATE`, `WATER_RATE`, `TREAT_VALUE`, `WATER_VALUE`,
 ## 7. UI
 
 Rendered by a parallel **UIScene** overlay so HUD updates don't disturb the map.
+
 - **Status bars** for food, water, poop, pee — each with an **icon** and showing
   true underlying values (fixes V1's `STATUS_BAR_SCALE` display quirk).
 - **Countdown timer** (mm:ss).
@@ -205,6 +212,7 @@ Rendered by a parallel **UIScene** overlay so HUD updates don't disturb the map.
 
 All-new **flat/vector SVG** assets sharing a warm-summer palette defined in
 `palette.ts`:
+
 - **Tiles:** rounded houses with soft shadows, sandy pavement, teal water, plank
   fences.
 - **Grass:** a base grass tile with a **color-overlay tint** driven by `dirt`
@@ -226,6 +234,7 @@ separate images per state.
 ## 10. Testing (TDD)
 
 Vitest unit tests target the pure logic modules:
+
 - `blockParser` — block-string → (class, owner_id, fence metadata) across all V1
   string shapes.
 - `MapParser` / `Grid` — tile model + edge-aware passability + fence edges.

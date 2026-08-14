@@ -1,8 +1,23 @@
 import Phaser from 'phaser';
 import {
-  config, DEFAULTS, INIT_ONLY_KEYS, applyConfig, resetConfig, serializeConfig, parseConfig, type GameConfig,
+  config,
+  DEFAULTS,
+  INIT_ONLY_KEYS,
+  applyConfig,
+  resetConfig,
+  serializeConfig,
+  parseConfig,
+  type GameConfig,
 } from '../config/gameConfig';
 import { banditSettings, resetBanditSettings } from '../config/banditMode';
+import { ITEMS, ITEM_TYPES, type ItemType } from '../entities/Item';
+
+export interface DevPanelOpts {
+  onRestart?: () => void;
+  /** Hand Blizzard one of an item, so its behaviour can be exercised without
+   *  waiting on a random drop or a 1000-food milestone. */
+  onGrantItem?: (type: ItemType) => void;
+}
 
 const KEYS = Object.keys(DEFAULTS) as (keyof GameConfig)[];
 const PROFILES_KEY = 'husky-dev-profiles';
@@ -12,10 +27,18 @@ function applyStyle(el: HTMLElement, styles: Partial<CSSStyleDeclaration>): void
 }
 
 function loadProfiles(): Record<string, Partial<GameConfig>> {
-  try { return JSON.parse(localStorage.getItem(PROFILES_KEY) ?? '{}'); } catch { return {}; }
+  try {
+    return JSON.parse(localStorage.getItem(PROFILES_KEY) ?? '{}');
+  } catch {
+    return {};
+  }
 }
 function saveProfiles(p: Record<string, Partial<GameConfig>>): void {
-  try { localStorage.setItem(PROFILES_KEY, JSON.stringify(p)); } catch { /* storage unavailable */ }
+  try {
+    localStorage.setItem(PROFILES_KEY, JSON.stringify(p));
+  } catch {
+    /* storage unavailable */
+  }
 }
 
 // A dev-only HTML overlay for live-tuning the runtime config. Sits above the
@@ -29,16 +52,26 @@ export class DevPanel {
   private banditToggle!: HTMLInputElement;
   private open = false;
 
-  constructor(private opts: { onRestart?: () => void } = {}) {
+  constructor(private opts: DevPanelOpts = {}) {
     this.root = document.createElement('div');
     // Docked to the window's left edge so it sits in the left letterbox strip
     // beside the map. Visible by default in dev mode; backtick toggles it.
     applyStyle(this.root, {
-      position: 'fixed', top: '8px', left: '6px', zIndex: '9999',
-      width: '208px', maxHeight: '96vh', overflowY: 'auto', boxSizing: 'border-box',
-      background: 'rgba(36,31,27,0.96)', color: '#f2ede0',
-      font: '11px monospace', padding: '8px', borderRadius: '10px',
-      border: '1px solid rgba(242,237,224,0.2)', boxShadow: '0 6px 24px rgba(0,0,0,0.45)',
+      position: 'fixed',
+      top: '8px',
+      left: '6px',
+      zIndex: '9999',
+      width: '208px',
+      maxHeight: '96vh',
+      overflowY: 'auto',
+      boxSizing: 'border-box',
+      background: 'rgba(36,31,27,0.96)',
+      color: '#f2ede0',
+      font: '11px monospace',
+      padding: '8px',
+      borderRadius: '10px',
+      border: '1px solid rgba(242,237,224,0.2)',
+      boxShadow: '0 6px 24px rgba(0,0,0,0.45)',
     });
     this.build();
     document.body.appendChild(this.root);
@@ -57,14 +90,43 @@ export class DevPanel {
     for (const key of KEYS) this.root.appendChild(this.buildRow(key));
 
     const resets = this.buttonRow(
-      this.button('Reset to Defaults', () => { resetConfig(); resetBanditSettings(); this.syncInputs(); }),
+      this.button('Reset to Defaults', () => {
+        resetConfig();
+        resetBanditSettings();
+        this.syncInputs();
+      }),
       this.button('Restart Game', () => this.opts.onRestart?.()),
     );
     const files = this.buttonRow(
       this.button('Import .txt', () => this.importFile()),
       this.button('Save .txt', () => this.save()),
     );
-    this.root.append(resets, files, this.buildBanditToggle(), this.buildProfiles());
+    this.root.append(resets, files, this.buildItemGrants(), this.buildBanditToggle(), this.buildProfiles());
+  }
+
+  // Grant-an-item buttons. Built from ITEM_TYPES — the same table that drives
+  // the number keys, the HUD belt and the tutorial — so a fifth item would show
+  // up here on its own. Each routes through the production grant path, tutorial
+  // included, rather than poking the count directly: a shortcut here would mean
+  // the panel exercised something the real game never does.
+  private buildItemGrants(): HTMLDivElement {
+    const wrap = document.createElement('div');
+    applyStyle(wrap, { marginTop: '10px', borderTop: '1px solid #4a423a', paddingTop: '8px' });
+    const label = document.createElement('div');
+    label.textContent = 'GRANT ITEM';
+    applyStyle(label, { color: '#ffd27f', fontWeight: 'bold', marginBottom: '4px' });
+    wrap.append(label);
+    // Two per row so the labels stay legible in the narrow panel.
+    for (let i = 0; i < ITEM_TYPES.length; i += 2) {
+      wrap.append(
+        this.buttonRow(
+          ...ITEM_TYPES.slice(i, i + 2).map((type) =>
+            this.button(`${ITEMS[type].key}  ${ITEMS[type].name}`, () => this.opts.onGrantItem?.(type)),
+          ),
+        ),
+      );
+    }
+    return wrap;
   }
 
   // A live toggle for Bandit's AI mode. Its own labelled section (not folded
@@ -81,7 +143,9 @@ export class DevPanel {
     const cb = document.createElement('input');
     cb.type = 'checkbox';
     cb.checked = banditSettings.omniscient;
-    cb.addEventListener('change', () => { banditSettings.omniscient = cb.checked; });
+    cb.addEventListener('change', () => {
+      banditSettings.omniscient = cb.checked;
+    });
     const txt = document.createElement('span');
     txt.textContent = 'Omniscient (always finds the best food)';
     this.banditToggle = cb;
@@ -108,14 +172,22 @@ export class DevPanel {
 
     this.profileSelect = document.createElement('select');
     applyStyle(this.profileSelect, {
-      width: '100%', background: '#1a1613', color: '#f2ede0', border: '1px solid #555',
-      borderRadius: '4px', padding: '3px', marginBottom: '6px',
+      width: '100%',
+      background: '#1a1613',
+      color: '#f2ede0',
+      border: '1px solid #555',
+      borderRadius: '4px',
+      padding: '3px',
+      marginBottom: '6px',
     });
     this.profileSelect.addEventListener('change', () => {
       const name = this.profileSelect.value;
       if (!name) return;
       const prof = loadProfiles()[name];
-      if (prof) { applyConfig(prof); this.syncInputs(); }
+      if (prof) {
+        applyConfig(prof);
+        this.syncInputs();
+      }
     });
     this.refreshProfiles();
 
@@ -123,8 +195,13 @@ export class DevPanel {
     nameInput.type = 'text';
     nameInput.placeholder = 'profile name';
     applyStyle(nameInput, {
-      flex: '1', minWidth: '0', background: '#1a1613', color: '#f2ede0',
-      border: '1px solid #555', borderRadius: '4px', padding: '3px',
+      flex: '1',
+      minWidth: '0',
+      background: '#1a1613',
+      color: '#f2ede0',
+      border: '1px solid #555',
+      borderRadius: '4px',
+      padding: '3px',
     });
     const saveBtn = this.button('Save', () => {
       const name = nameInput.value.trim();
@@ -147,11 +224,13 @@ export class DevPanel {
     const names = Object.keys(loadProfiles());
     this.profileSelect.innerHTML = '';
     const ph = document.createElement('option');
-    ph.value = ''; ph.textContent = names.length ? '— load profile —' : '(no profiles yet)';
+    ph.value = '';
+    ph.textContent = names.length ? '— load profile —' : '(no profiles yet)';
     this.profileSelect.append(ph);
     for (const n of names) {
       const o = document.createElement('option');
-      o.value = n; o.textContent = n;
+      o.value = n;
+      o.textContent = n;
       this.profileSelect.append(o);
     }
     this.profileSelect.value = selected;
@@ -164,7 +243,10 @@ export class DevPanel {
     picker.addEventListener('change', () => {
       const file = picker.files?.[0];
       if (!file) return;
-      file.text().then((text) => { applyConfig(parseConfig(text)); this.syncInputs(); });
+      file.text().then((text) => {
+        applyConfig(parseConfig(text));
+        this.syncInputs();
+      });
     });
     picker.click();
   }
@@ -172,17 +254,30 @@ export class DevPanel {
   private buildRow(key: keyof GameConfig): HTMLLabelElement {
     const initOnly = INIT_ONLY_KEYS.has(key);
     const row = document.createElement('label');
-    applyStyle(row, { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', margin: '2px 0' });
+    applyStyle(row, {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      gap: '8px',
+      margin: '2px 0',
+    });
     const name = document.createElement('span');
     name.textContent = initOnly ? `${key} ↻` : key;
-    if (initOnly) { name.title = 'Applies on next game start'; applyStyle(name, { color: '#b7a482' }); }
+    if (initOnly) {
+      name.title = 'Applies on next game start';
+      applyStyle(name, { color: '#b7a482' });
+    }
     const input = document.createElement('input');
     input.type = 'number';
     input.step = 'any';
     input.value = String(config[key]);
     applyStyle(input, {
-      width: '58px', background: '#1a1613', color: '#f2ede0',
-      border: '1px solid #555', borderRadius: '4px', padding: '2px 3px',
+      width: '58px',
+      background: '#1a1613',
+      color: '#f2ede0',
+      border: '1px solid #555',
+      borderRadius: '4px',
+      padding: '2px 3px',
     });
     input.addEventListener('change', () => {
       const v = parseFloat(input.value);
@@ -197,8 +292,14 @@ export class DevPanel {
     const b = document.createElement('button');
     b.textContent = label;
     applyStyle(b, {
-      flex: '1', cursor: 'pointer', background: '#8fd98f', color: '#26301f',
-      border: 'none', borderRadius: '6px', padding: '6px', fontWeight: 'bold',
+      flex: '1',
+      cursor: 'pointer',
+      background: '#8fd98f',
+      color: '#26301f',
+      border: 'none',
+      borderRadius: '6px',
+      padding: '6px',
+      fontWeight: 'bold',
     });
     b.addEventListener('click', fn);
     return b;
@@ -219,22 +320,25 @@ export class DevPanel {
     URL.revokeObjectURL(url);
   }
 
-  toggle(): void { this.setOpen(!this.open); }
+  toggle(): void {
+    this.setOpen(!this.open);
+  }
 
   setOpen(v: boolean): void {
     this.open = v;
     this.root.style.display = v ? 'block' : 'none';
   }
 
-  destroy(): void { this.root.remove(); }
+  destroy(): void {
+    this.root.remove();
+  }
 }
 
 // Wire a dev panel to a scene: create it, toggle on backtick, tear it down when
 // the scene shuts down. Keeps the Phaser lifecycle glue out of the scene body.
-export function attachDevPanel(scene: Phaser.Scene, opts: { onRestart?: () => void } = {}): DevPanel {
+export function attachDevPanel(scene: Phaser.Scene, opts: DevPanelOpts = {}): DevPanel {
   const panel = new DevPanel(opts);
-  scene.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.BACKTICK)
-    .on('down', () => panel.toggle());
+  scene.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.BACKTICK).on('down', () => panel.toggle());
   scene.events.once('shutdown', () => panel.destroy());
   return panel;
 }

@@ -37,7 +37,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PROJECT_OWNER: logan-d-clark
-      PROJECT_NUMBER: "1" # <-- SET THIS (see header)
+      PROJECT_NUMBER: '1' # <-- SET THIS (see header)
     steps:
       - uses: actions/github-script@v7
         with:

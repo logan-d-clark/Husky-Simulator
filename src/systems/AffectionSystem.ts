@@ -4,8 +4,10 @@ import { config } from '../config/gameConfig';
 
 export const AffectionSystem = {
   applyAction(owner: Owner, action: 'pee' | 'poop' | 'trick'): void {
-    if (action === 'pee') owner.affection = Math.max(0, owner.affection - config.PEE_COST * owner.sensitivity);
-    else if (action === 'poop') owner.affection = Math.max(0, owner.affection - config.POOP_COST * owner.sensitivity);
+    if (action === 'pee')
+      owner.affection = Math.max(0, owner.affection - config.PEE_COST * owner.sensitivity);
+    else if (action === 'poop')
+      owner.affection = Math.max(0, owner.affection - config.POOP_COST * owner.sensitivity);
     else if (action === 'trick') owner.affection = Math.min(100, owner.affection + config.TRICK_RATE);
   },
 

@@ -30,8 +30,14 @@ export function assignHouseFaces(map: GameMap): Map<string, HouseFace> {
       while (stack.length > 0) {
         const t = stack.pop()!;
         comp.push(t);
-        for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
-          const nc = t.c + dc, nr = t.r + dr;
+        for (const [dc, dr] of [
+          [1, 0],
+          [-1, 0],
+          [0, 1],
+          [0, -1],
+        ] as const) {
+          const nc = t.c + dc,
+            nr = t.r + dr;
           if (isHouse(nc, nr) && !visited.has(k(nc, nr))) {
             visited.add(k(nc, nr));
             stack.push({ c: nc, r: nr });
@@ -50,7 +56,10 @@ export function assignHouseFaces(map: GameMap): Map<string, HouseFace> {
       if (!bottomHouse) {
         // Door on the facade tile nearest the facade's horizontal center.
         const avg = facade.reduce((s, t) => s + t.c, 0) / facade.length;
-        door = facade.reduce((best, t) => (Math.abs(t.c - avg) < Math.abs(best.c - avg) ? t : best), facade[0]);
+        door = facade.reduce(
+          (best, t) => (Math.abs(t.c - avg) < Math.abs(best.c - avg) ? t : best),
+          facade[0],
+        );
       }
       for (const t of facade) {
         if (door && t.c === door.c && t.r === door.r) result.set(k(t.c, t.r), 'door');

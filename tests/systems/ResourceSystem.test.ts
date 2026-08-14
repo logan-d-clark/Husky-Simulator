@@ -25,23 +25,28 @@ describe('ResourceSystem', () => {
     expect(i.food).toBe(70);
   });
   it('drinking adds water but caps at 125', () => {
-    const i = inv(); i.water = 120;
+    const i = inv();
+    i.water = 120;
     ResourceSystem.drink(i);
     expect(i.water).toBe(125);
   });
   it('game over on food or water <= 0', () => {
-    const i = inv(); i.food = 0;
+    const i = inv();
+    i.food = 0;
     expect(ResourceSystem.isGameOver(i)).toBe('Food');
-    const j = inv(); j.water = -1;
+    const j = inv();
+    j.water = -1;
     expect(ResourceSystem.isGameOver(j)).toBe('Water');
     expect(ResourceSystem.isGameOver(inv())).toBeNull();
   });
   describe('shouldEndGame', () => {
     it('ends on time first, then food, then water', () => {
       expect(ResourceSystem.shouldEndGame(inv(), 0)).toBe('Time');
-      const i = inv(); i.food = 0;
+      const i = inv();
+      i.food = 0;
       expect(ResourceSystem.shouldEndGame(i, 100)).toBe('Food');
-      const j = inv(); j.water = 0;
+      const j = inv();
+      j.water = 0;
       expect(ResourceSystem.shouldEndGame(j, 100)).toBe('Water');
       expect(ResourceSystem.shouldEndGame(inv(), 100)).toBeNull();
     });

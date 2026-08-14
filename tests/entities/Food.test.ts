@@ -4,7 +4,9 @@ import type { Food } from '../../src/entities/Food';
 import { config } from '../../src/config/gameConfig';
 
 const food = (col: number, row: number, type: Food['type'] = 'treat', value = 10): Food => ({
-  type, value, tile: { col, row },
+  type,
+  value,
+  tile: { col, row },
 });
 
 describe('foodValue', () => {

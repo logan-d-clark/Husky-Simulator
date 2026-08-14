@@ -14,7 +14,7 @@ opponent is out collecting food — is the same for both dogs.
 ### Measured basis for the parity claim
 
 - Blizzard's `GameScene.action` is a **single** value (`'drink' | 'poop' | 'pee'
-  | 'trick' | null`, `GameScene.ts:44`), and `onTick` applies at most one of
+| 'trick' | null`, `GameScene.ts:44`), and `onTick` applies at most one of
   `WorldActions.poop` / `.pee` per tick (`GameScene.ts:306-307`). One channel,
   `POOP_RATE`/`PEE_RATE` = 1 unit per tick.
 - `BanditController.relieveOnce` calls **both** `WorldActions.poop` and
@@ -49,7 +49,7 @@ to be empty. So this is a latent spec-compliance defect, not a new decision.
 ### HUD label bug
 
 `banditGoalLabel` reads `inv.poop > 1 ? 'Need to Poop!' : 'Need to Pee!'` — it
-reports *"is he holding any drainable poop"*, not *what he is doing*. So a trip
+reports _"is he holding any drainable poop"_, not _what he is doing_. So a trip
 triggered by a full pee bar reads "Need to Poop!" whenever he happens to be
 carrying poop. Root cause: the label is derived from inventory rather than from
 the episode's actual state.
@@ -125,9 +125,9 @@ Scenario: he ignores a tile that cannot take his channel
 
 ## Ambiguity log
 
-| Question | Resolution | Source |
-| --- | --- | --- |
-| One full channel, other partly loaded — drain which? | Only the full one | user, 2026-08-09 |
-| Order when both are full | Poop first, then pee | assumed (matches label precedence) |
-| Channel filling mid-episode | Picked up when the queue is recomputed | assumed |
-| Is ~20s of standing still too long? | It is the point — that is the opportunity cost being equalized | user intent, stated |
+| Question                                             | Resolution                                                     | Source                             |
+| ---------------------------------------------------- | -------------------------------------------------------------- | ---------------------------------- |
+| One full channel, other partly loaded — drain which? | Only the full one                                              | user, 2026-08-09                   |
+| Order when both are full                             | Poop first, then pee                                           | assumed (matches label precedence) |
+| Channel filling mid-episode                          | Picked up when the queue is recomputed                         | assumed                            |
+| Is ~20s of standing still too long?                  | It is the point — that is the opportunity cost being equalized | user intent, stated                |

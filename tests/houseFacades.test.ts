@@ -8,8 +8,15 @@ import { emptyFences } from '../src/world/tiles';
 function mapFrom(gridRows: string[]): GameMap {
   const tiles: Tile[][] = gridRows.map((line, r) =>
     line.split('').map((ch, c) => ({
-      col: c, row: r, type: ch === 'H' ? 'house' : 'grass', ownerId: 0,
-      fences: emptyFences(), heat: 0, dirt: 0, destruction: 0, foodPresent: false,
+      col: c,
+      row: r,
+      type: ch === 'H' ? 'house' : 'grass',
+      ownerId: 0,
+      fences: emptyFences(),
+      heat: 0,
+      dirt: 0,
+      destruction: 0,
+      foodPresent: false,
     })),
   );
   return { rows: tiles.length, cols: tiles[0].length, tiles };

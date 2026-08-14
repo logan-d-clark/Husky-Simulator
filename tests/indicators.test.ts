@@ -38,7 +38,8 @@ describe('heatLabel', () => {
 });
 
 describe('thresholdMarkerX', () => {
-  const LEFT = 100, WIDTH = 200;
+  const LEFT = 100,
+    WIDTH = 200;
 
   it('puts 0 at the left edge of the bar and 100 at its right', () => {
     expect(thresholdMarkerX(0, LEFT, WIDTH)).toBe(LEFT);

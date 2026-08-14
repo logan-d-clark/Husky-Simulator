@@ -7,8 +7,8 @@ export interface Tile {
   ownerId: number;
   fences: FenceEdges;
   heat: number;
-  dirt: number;         // poop accumulation
-  destruction: number;  // pee accumulation
+  dirt: number; // poop accumulation
+  destruction: number; // pee accumulation
   foodPresent: boolean;
   houseColor?: 'marble' | 'clay';
 }

@@ -10,7 +10,20 @@ effort: low
 Output JSON:
 
 ```json
-{"status": "pass|warn|fail|skip", "issues": [{"severity": "error|warning|suggestion", "confidence": "high|medium|none", "file": "", "line": 0, "message": "", "suggestedFix": ""}], "summary": ""}
+{
+  "status": "pass|warn|fail|skip",
+  "issues": [
+    {
+      "severity": "error|warning|suggestion",
+      "confidence": "high|medium|none",
+      "file": "",
+      "line": 0,
+      "message": "",
+      "suggestedFix": ""
+    }
+  ],
+  "summary": ""
+}
 ```
 
 Status: pass=strict TypeScript, warn=improvements needed, fail=type safety violations

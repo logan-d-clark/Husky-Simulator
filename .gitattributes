@@ -1,0 +1,24 @@
+# Canonical LF in the repo AND in the working tree, on every platform.
+#
+# Without this, core.autocrlf=true checks files out as CRLF on Windows while
+# Prettier's endOfLine:"lf" expects LF — which failed ~20 files on line endings
+# alone and printed "LF will be replaced by CRLF" on every commit. Pinning eol
+# here also means format:check cannot disagree between CI and a dev box.
+* text=auto eol=lf
+
+# Binary assets, declared explicitly rather than left to the text=auto
+# heuristic. That matters most for the Illustrator source under Reference
+# Materials: it is PDF-based, so it opens with ASCII ("%PDF-1.6\r%...") and git's
+# own diff machinery already reports it as 2287 lines of text. Only the
+# NUL-byte check in the conversion path is currently keeping eol=lf from
+# stripping its carriage returns and corrupting it — too thin a thread to hang a
+# binary asset on.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.xlsx binary
+*.ai   binary
+
+# SVG, CSV and the dev-panel .txt profiles are genuinely text and should be
+# normalised like everything else — they are deliberately not listed above.

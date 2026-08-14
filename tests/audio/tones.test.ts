@@ -1,8 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { midiToFreq, placePhrase, type ToneStep } from '../../src/audio/tones';
 
-const s = (over: Partial<ToneStep> = {}): ToneStep =>
-  ({ freq: 440, dur: 0.1, wave: 'sine', gain: 0.5, ...over });
+const s = (over: Partial<ToneStep> = {}): ToneStep => ({
+  freq: 440,
+  dur: 0.1,
+  wave: 'sine',
+  gain: 0.5,
+  ...over,
+});
 
 describe('midiToFreq', () => {
   it('anchors on A4 = 440Hz', () => {

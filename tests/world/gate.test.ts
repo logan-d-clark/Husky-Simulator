@@ -40,8 +40,7 @@ function reachable(grid: Grid, from: TileCoord): Set<string> {
   return seen;
 }
 
-const walkableCount = (grid: Grid) =>
-  grid.map.tiles.flat().filter((t) => t.type !== 'house').length;
+const walkableCount = (grid: Grid) => grid.map.tiles.flat().filter((t) => t.type !== 'house').length;
 
 describe('the Grumbles driveway gate', () => {
   it('is exactly two tiles wide', () => {
@@ -86,10 +85,12 @@ describe('the Grumbles driveway gate', () => {
     });
 
     it('pens him with only his own family and their driveway', () => {
-      const owners = new Set([...pen].map((k) => {
-        const [col, row] = k.split(',').map(Number);
-        return grid.map.tiles[row][col].ownerId;
-      }));
+      const owners = new Set(
+        [...pen].map((k) => {
+          const [col, row] = k.split(',').map(Number);
+          return grid.map.tiles[row][col].ownerId;
+        }),
+      );
       expect([...owners].sort((a, b) => a - b)).toEqual([0, 1]); // public + The Grumbles
     });
   });
@@ -106,8 +107,7 @@ describe('the Grumbles driveway gate', () => {
     it('restores the map exactly as it ships — the gate leaves no trace', () => {
       const pristine = new Grid(parseMap(MAP));
       for (const g of GATE_TILES) {
-        expect(grid.map.tiles[g.row][g.col].fences)
-          .toEqual(pristine.map.tiles[g.row][g.col].fences);
+        expect(grid.map.tiles[g.row][g.col].fences).toEqual(pristine.map.tiles[g.row][g.col].fences);
       }
     });
   });
