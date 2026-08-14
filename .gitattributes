@@ -1,0 +1,10 @@
+# Canonical LF in the repo AND in the working tree, on every platform.
+#
+# Without this, core.autocrlf=true checks files out as CRLF on Windows while
+# Prettier's endOfLine:"lf" expects LF — which failed ~20 files on line endings
+# alone and printed "LF will be replaced by CRLF" on every commit. Pinning eol
+# here also means format:check cannot disagree between CI and a dev box.
+* text=auto eol=lf
+
+# Binary: never touch these.
+*.png binary
