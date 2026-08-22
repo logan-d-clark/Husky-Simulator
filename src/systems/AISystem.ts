@@ -267,6 +267,33 @@ export function firstReachableRelieveTarget(
 // falling back to the half-speed street patrol. Each goal falls through to the
 // treat chain when its own target is unreachable, so he never stands still.
 // All goal-directed moves are full-speed chases.
+/**
+ * The best food a walker can actually WALK to, plus the first step toward it.
+ *
+ * `bestFoodAnywhere` ranks by value over *manhattan* distance, but the step
+ * comes from a real path — which frequently moves away in straight-line terms to
+ * get round a fence. Re-picking every tick therefore oscillates: leave a yard by
+ * its only exit, the target's manhattan distance grows, a different treat now
+ * scores higher, and the next step walks straight back in. Callers commit to the
+ * returned food and only re-pick when it is gone, which is what actually stops
+ * the loop; this function's job is to never hand back a target with no path.
+ */
+export function firstReachableFood(
+  grid: Grid,
+  from: TileCoord,
+  foods: Food[],
+  blocked: (t: TileCoord) => boolean = () => false,
+): { food: Food; dir: Direction } | null {
+  const ranked = [...foods].sort(
+    (a, b) => b.value / (manhattan(from, b.tile) + 1) - a.value / (manhattan(from, a.tile) + 1),
+  );
+  for (const food of ranked) {
+    const dir = bfsFirstStep(grid, from, (t) => t.col === food.tile.col && t.row === food.tile.row, blocked);
+    if (dir) return { food, dir };
+  }
+  return null;
+}
+
 export interface BanditMoveContext {
   goal?: BanditGoal;
   relieveTargets?: RelieveTarget[];

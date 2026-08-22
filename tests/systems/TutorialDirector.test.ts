@@ -20,6 +20,7 @@ const state = (over: Partial<DirectorState> = {}): DirectorState => ({
   yardAffection: 0,
   items: emptyCounts(),
   banditPenned: true,
+  zooming: false,
   ...over,
 });
 
@@ -31,7 +32,7 @@ const SOLVE: Record<string, { events?: [TutorialEvent, number][]; state?: Partia
   hud: { events: [['stepped', 15]] },
   drink: { events: [['drank', 8]] },
   relieve: { events: [['pooped', 8]] },
-  yard: { state: { onFamilyYard: true } },
+  yard: { events: [['tick', 30]], state: { onFamilyYard: true } },
   trick: { events: [['tricked', 5]] },
   thresholds: { state: { yardAffection: config.BOWL_THRESHOLD } },
   bandit: { state: { banditPenned: false } },
@@ -190,5 +191,118 @@ describe('coaching warnings', () => {
       expect(WARNINGS[id].title.length).toBeGreaterThan(0);
       expect(WARNINGS[id].body.length).toBeGreaterThan(20);
     }
+  });
+});
+
+describe('teaching order', () => {
+  // The reported defect: the relieve stage said fouling "costs that family some
+  // affection" three stages before affection existed. Encoded as an invariant so
+  // it cannot come back — for each concept, the stage that TEACHES it must come
+  // before any other stage that leans on it.
+  const CONCEPTS: { word: RegExp; taughtBy: string }[] = [
+    { word: /affection|likes you/i, taughtBy: 'yard' },
+    { word: /toleran/i, taughtBy: 'yard' },
+  ];
+
+  for (const { word, taughtBy } of CONCEPTS) {
+    it(`introduces ${word.source.split('|')[0]} before anything relies on it`, () => {
+      const teachIdx = TUTORIAL_STAGES.findIndex((s) => s.id === taughtBy);
+      expect(teachIdx, `no stage "${taughtBy}"`).toBeGreaterThanOrEqual(0);
+      TUTORIAL_STAGES.forEach((stage, i) => {
+        if (i >= teachIdx) return;
+        expect(word.test(stage.body), `stage "${stage.id}" uses the term before "${taughtBy}"`).toBe(false);
+      });
+    });
+  }
+
+  it('states how the game is won early, not only at the end', () => {
+    const early = TUTORIAL_STAGES.slice(0, 3);
+    expect(early.some((s) => /more food than/i.test(s.body))).toBe(true);
+  });
+
+  it('explains where items come from before handing four of them over', () => {
+    const firstItem = TUTORIAL_STAGES.find((s) => s.setup?.grantItem);
+    expect(firstItem).toBeDefined();
+    expect(firstItem!.body).toMatch(/never start with|turn up|around the map/i);
+  });
+
+  it('teaches that a spot fills up', () => {
+    const relieve = TUTORIAL_STAGES.find((s) => s.id === 'relieve');
+    expect(relieve!.body).toMatch(/only so much|holds only|cannot keep using/i);
+  });
+
+  it('warns that Bandit has the same needs and targets your best lawn', () => {
+    const bandit = TUTORIAL_STAGES.find((s) => s.id === 'bandit');
+    expect(bandit!.body).toMatch(/fills up|needs/i);
+    expect(bandit!.body).toMatch(/likes you MOST|most/i);
+  });
+
+  it('gives every hotkey it teaches a mnemonic', () => {
+    const all = TUTORIAL_STAGES.map((s) => s.body).join(' ');
+    expect(all).toMatch(/Q for quench/i);
+    expect(all).toMatch(/E for exercise/i);
+    expect(all).toMatch(/C for crap/i);
+    expect(all).toMatch(/Z for the noise/i);
+  });
+});
+
+describe('the zoomies stage waits for the effect', () => {
+  const zoomState = (over: Partial<DirectorState> = {}) => state({ zooming: true, ...over });
+
+  it('does not complete on the keypress while he is still zooming', () => {
+    const d = new TutorialDirector();
+    for (const stage of TUTORIAL_STAGES) {
+      if (stage.id === 'zoomies') break;
+      const solve = solveStage(d, stage.id);
+      d.update(state(solve?.state));
+    }
+    expect(d.stage()?.id).toBe('zoomies');
+    d.bump('used:zoomies');
+    expect(d.update(zoomState()).advanced).toBe(false); // still tearing around
+    expect(d.update(state({ zooming: false })).advanced).toBe(true); // effect over
+  });
+});
+
+describe('HUD highlights', () => {
+  const REGIONS = [
+    'blizzardCard',
+    'waterBar',
+    'currentSpace',
+    'affectionBar',
+    'spotBars',
+    'banditCard',
+    'itemBelt',
+  ];
+
+  it('only names regions the HUD actually knows how to draw', () => {
+    // A typo would silently highlight nothing at all.
+    for (const s of TUTORIAL_STAGES) {
+      if (s.highlight) expect(REGIONS, s.id).toContain(s.highlight);
+    }
+  });
+
+  it('points at something on every stage that describes the HUD', () => {
+    for (const id of ['hud', 'drink', 'yard', 'trick', 'thresholds', 'relieve', 'bandit']) {
+      const stage = TUTORIAL_STAGES.find((s) => s.id === id);
+      expect(stage?.highlight, `stage "${id}" talks about the HUD but points at nothing`).toBeTruthy();
+    }
+  });
+});
+
+describe('a stage cannot flash past unread', () => {
+  it('holds the lawn stage even when he is already standing on one', () => {
+    // Its condition is true the moment the stage begins if he happens to be on a
+    // lawn, so without a dwell the whole affection/tolerance lesson — which every
+    // later stage leans on — completes on its first frame and is never seen.
+    const d = new TutorialDirector();
+    for (const stage of TUTORIAL_STAGES) {
+      if (stage.id === 'yard') break;
+      const solve = solveStage(d, stage.id);
+      d.update(state(solve?.state));
+    }
+    expect(d.stage()?.id).toBe('yard');
+    expect(d.update(state({ onFamilyYard: true })).advanced).toBe(false);
+    for (let i = 0; i < 30; i++) d.bump('tick');
+    expect(d.update(state({ onFamilyYard: true })).advanced).toBe(true);
   });
 });

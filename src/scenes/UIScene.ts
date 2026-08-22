@@ -6,6 +6,7 @@ import { HUSKY_NAME, CHI_NAME } from '../config/names';
 import { tolerancePips, pipString, heatLabel, thresholdMarkerX, formatClock } from '../ui/indicators';
 import type { GameScene } from './GameScene';
 import { ITEMS, ITEM_TYPES } from '../entities/Item';
+import type { HudRegion } from '../systems/TutorialScript';
 
 export const HUD_H = 180;
 
@@ -58,6 +59,9 @@ const BAR_KEYS: { row: number; key: string }[] = [
   { row: 3, key: 'Z' },
 ];
 const BAR_KEY_X = LEFT_BAR + BAR_W + 7;
+// E acts on the affection meter over in Current Space, so its badge lives there
+// rather than with the three that act on Blizzard's own bars.
+const AFFECTION_KEY_X = CS_A_BAR + BAR_W + 6;
 // Four item slots across Blizzard's 346-wide card. Each is drawn as a pill so
 // the hotkey, icon and count read as one unit instead of three loose glyphs.
 const ITEM_SLOT_W = 82;
@@ -70,6 +74,37 @@ const PILL_W = 74,
 const PENNED_CX = BANDIT_CARD_X + BANDIT_CARD_W / 2;
 // Hoisted: create() and update() both draw with it.
 const CREAM = Phaser.Display.Color.HexStringToColor(PALETTE.hudText).color;
+// Which rectangle each tutorial highlight names. Kept here because UIScene owns
+// every pixel of the HUD; the script only names a region.
+const HIGHLIGHT_PAD = 5;
+function highlightRect(region: HudRegion, y0: number, W: number): [number, number, number, number] | null {
+  switch (region) {
+    case 'blizzardCard':
+      return [12, y0 + 30, 346, HUD_H - 42];
+    case 'waterBar':
+      return [LEFT_BAR, y0 + ROW(1) + BAR_DY, BAR_W, BAR_H];
+    case 'currentSpace':
+      return [CS_X - 12, y0 + 30, W - (CS_X - 12) - 20, HUD_H - 42];
+    case 'affectionBar':
+      // Down to the icon row: the threshold stage points at the bowl/bag/pupcup
+      // marks, so an outline stopping at the bar would exclude the very things
+      // its copy is describing.
+      return [CS_A_BAR, y0 + AFFECTION_BAR_Y, BAR_W, AFFECTION_ICON_Y + 8 - AFFECTION_BAR_Y];
+    case 'spotBars':
+      return [CS_B_BAR, y0 + 88, BAR_W, 47];
+    case 'banditCard':
+      return [BANDIT_CARD_X, y0 + 30, BANDIT_CARD_W, HUD_H - 42];
+    case 'itemBelt':
+      return [LEFT_X - 6, y0 + ROW(4) + PILL_DY - 2, ITEM_SLOT_W * 4, PILL_H + 4];
+    default: {
+      // Exhaustive: a region added to HudRegion and used by a stage would
+      // otherwise silently outline nothing at all.
+      const unreachable: never = region;
+      return unreachable;
+    }
+  }
+}
+
 // Tutorial banner strip, across the top of the play area.
 const BANNER_X = 16,
   BANNER_Y = 12,
@@ -168,6 +203,14 @@ export class UIScene extends Phaser.Scene {
     mk('waterL', LEFT_X, y0 + ROW(1));
     mk('poopL', LEFT_X, y0 + ROW(2));
     mk('peeL', LEFT_X, y0 + ROW(3));
+    // E acts on the affection meter, so its badge sits beside that.
+    this.add
+      .text(AFFECTION_KEY_X, y0 + AFFECTION_BAR_Y + 1, 'E', {
+        color: '#ffd27f',
+        fontSize: '12px',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0, 0);
     // Hotkey badges beside Blizzard's action bars: drink, poop, pee.
     for (const { row, key } of BAR_KEYS) {
       this.add
@@ -378,5 +421,26 @@ export class UIScene extends Phaser.Scene {
     this.texts.csPeeL.setText('Pee');
     bar(CS_B_BAR, y0 + 91, s.currentTile.dirt, config.POOP_MAX, PALETTE.fence);
     bar(CS_B_BAR, y0 + 121, s.currentTile.destruction, config.PEE_MAX, PALETTE.affection);
+
+    // Whatever the current stage is talking about, outlined so the player is
+    // looking at the right thing. Pulsed off the scene clock, which needs no
+    // delta plumbing. Drawn last so it frames the panel rather than hiding under
+    // its fills.
+    if (tut?.highlight) {
+      const rect = highlightRect(tut.highlight, y0, GRID.COLS * GRID.TILE);
+      if (rect) {
+        const pulse = 0.55 + 0.45 * Math.abs(Math.sin(this.time.now / 380));
+        const [hx, hy, hw, hh] = rect;
+        this.g
+          .lineStyle(3, Phaser.Display.Color.HexStringToColor(PALETTE.treat).color, pulse)
+          .strokeRoundedRect(
+            hx - HIGHLIGHT_PAD,
+            hy - HIGHLIGHT_PAD,
+            hw + HIGHLIGHT_PAD * 2,
+            hh + HIGHLIGHT_PAD * 2,
+            8,
+          );
+      }
+    }
   }
 }
