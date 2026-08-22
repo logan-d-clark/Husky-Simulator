@@ -6,6 +6,7 @@ import { GameScene } from './scenes/GameScene';
 import { UIScene } from './scenes/UIScene';
 import { GameOverScene } from './scenes/GameOverScene';
 import { ItemInfoScene } from './scenes/ItemInfoScene';
+import { TutorialPanelScene } from './scenes/TutorialPanelScene';
 import { InstructionsScene } from './scenes/InstructionsScene';
 import { DESIGN_WIDTH, DESIGN_HEIGHT } from './config/constants';
 import { audio } from './audio/AudioEngine';
@@ -27,6 +28,7 @@ const game = new Phaser.Game({
     UIScene,
     GameOverScene,
     ItemInfoScene,
+    TutorialPanelScene,
   ],
 });
 

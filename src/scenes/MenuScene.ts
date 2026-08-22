@@ -85,6 +85,10 @@ export class MenuScene extends Phaser.Scene {
       audio.resume();
       this.scene.start('Game', { difficulty: this.difficulty, devMode: this.devMode });
     });
+    this.button(cx, layout.tutorialY, 240, 46, 'Tutorial', false, () => {
+      audio.resume();
+      this.scene.start('Game', { difficulty: DEFAULT_DIFFICULTY, tutorial: true });
+    });
     this.button(cx, layout.howToPlayY, 240, 46, 'How to Play', false, () => this.scene.start('Instructions'));
 
     // Dev mode lives out of the way in the bottom-left corner.

@@ -50,6 +50,14 @@ const FOOD_THRESHOLDS = [
 ] as const;
 const AFFECTION_BAR_Y = 121,
   AFFECTION_ICON_Y = 150;
+// The key that acts on each bar, parked just past its right end so the control
+// is readable straight off the thing it changes. Row 0 (food) has no key.
+const BAR_KEYS: { row: number; key: string }[] = [
+  { row: 1, key: 'Q' },
+  { row: 2, key: 'C' },
+  { row: 3, key: 'Z' },
+];
+const BAR_KEY_X = LEFT_BAR + BAR_W + 7;
 // Four item slots across Blizzard's 346-wide card. Each is drawn as a pill so
 // the hotkey, icon and count read as one unit instead of three loose glyphs.
 const ITEM_SLOT_W = 82;
@@ -62,12 +70,21 @@ const PILL_W = 74,
 const PENNED_CX = BANDIT_CARD_X + BANDIT_CARD_W / 2;
 // Hoisted: create() and update() both draw with it.
 const CREAM = Phaser.Display.Color.HexStringToColor(PALETTE.hudText).color;
+// Tutorial banner strip, across the top of the play area.
+const BANNER_X = 16,
+  BANNER_Y = 12,
+  BANNER_W = GRID.COLS * GRID.TILE - 32,
+  BANNER_H = 84,
+  BANNER_PAD = 14;
 
 export class UIScene extends Phaser.Scene {
   private g!: Phaser.GameObjects.Graphics;
   private texts: Record<string, Phaser.GameObjects.Text> = {};
   private thresholdIcons: Record<string, Phaser.GameObjects.Image> = {};
   private itemIcons: Record<string, Phaser.GameObjects.Image> = {};
+  // Tutorial banner: a strip over the top of the play area so the player reads
+  // the lesson while still playing it. Hidden entirely in a normal round.
+  private bannerBg!: Phaser.GameObjects.Graphics;
   constructor() {
     super('UI');
   }
@@ -90,6 +107,36 @@ export class UIScene extends Phaser.Scene {
     card(CS_X - 12, W - (CS_X - 12) - 20); // Current Space
 
     this.g = this.add.graphics();
+
+    // Tutorial banner. It sits OVER the top rows of the play area, not above
+    // them — there is no spare canvas up there — so it does cover Bandit's pen
+    // and the north pond. Acceptable because the stages that mention either
+    // point at his HUD card and at the south pond. Created always, shown only
+    // while a walkthrough is running.
+    this.bannerBg = this.add.graphics().setDepth(40).setVisible(false);
+    const bannerText = (key: string, y: number, size: string, color: string, bold = false) => {
+      this.texts[key] = this.add
+        .text(BANNER_X, y, '', {
+          color,
+          fontSize: size,
+          fontStyle: bold ? 'bold' : 'normal',
+          wordWrap: { width: BANNER_W - 2 * BANNER_PAD },
+        })
+        .setDepth(41)
+        .setVisible(false);
+    };
+    bannerText('tutStep', BANNER_Y + 10, '12px', '#d8b06a', true);
+    bannerText('tutTitle', BANNER_Y + 26, '18px', '#ffd27f', true);
+    bannerText('tutBody', BANNER_Y + 50, '14px', PALETTE.hudText);
+    this.texts.tutProgress = this.add
+      .text(BANNER_X + BANNER_W - BANNER_PAD, BANNER_Y + 10, '', {
+        color: '#8fd98f',
+        fontSize: '15px',
+        fontStyle: 'bold',
+      })
+      .setOrigin(1, 0)
+      .setDepth(41)
+      .setVisible(false);
 
     const mk = (
       k: string,
@@ -121,6 +168,16 @@ export class UIScene extends Phaser.Scene {
     mk('waterL', LEFT_X, y0 + ROW(1));
     mk('poopL', LEFT_X, y0 + ROW(2));
     mk('peeL', LEFT_X, y0 + ROW(3));
+    // Hotkey badges beside Blizzard's action bars: drink, poop, pee.
+    for (const { row, key } of BAR_KEYS) {
+      this.add
+        .text(BAR_KEY_X, y0 + ROW(row) + 2, key, {
+          color: '#ffd27f',
+          fontSize: '12px',
+          fontStyle: 'bold',
+        })
+        .setOrigin(0, 0);
+    }
     // Item belt, aligned with Bandit's goal line on the card opposite. Each slot
     // is the number key, the item's sprite, and how many he is carrying.
     ITEM_TYPES.forEach((type, i) => {
@@ -232,7 +289,11 @@ export class UIScene extends Phaser.Scene {
     if (s.chiPenned) {
       // Penned: his needs are frozen by design, so four flat bars would say
       // nothing. The one fact worth the space is when he gets out.
-      this.texts.bPennedTime.setText(formatClock(s.chiPennedSeconds));
+      // No clock running yet (the tutorial holds him until its Bandit stage):
+      // say so, rather than formatting a placeholder into a nonsense time.
+      const counting = s.chiPennedSeconds !== null;
+      this.texts.bPennedLabel.setText(counting ? 'Leaves the yard in:' : 'Shut in his own yard');
+      this.texts.bPennedTime.setText(counting ? formatClock(s.chiPennedSeconds as number) : '');
     } else {
       const n0 = (v: number) => Math.max(0, v).toFixed(0); // never show a transient "-0"
       bar(
@@ -269,8 +330,28 @@ export class UIScene extends Phaser.Scene {
       this.texts.bGoal.setText(s.chiGoalLabel);
     }
 
+    // Tutorial banner. One branch, so the strip and its four texts are always
+    // in agreement about whether a walkthrough is running.
+    const tut = s.tutorial;
+    this.bannerBg.clear().setVisible(!!tut);
+    for (const k of ['tutStep', 'tutTitle', 'tutBody', 'tutProgress']) {
+      this.texts[k].setVisible(!!tut);
+    }
+    if (tut) {
+      this.bannerBg.fillStyle(0x241f1b, 0.9).fillRoundedRect(BANNER_X, BANNER_Y, BANNER_W, BANNER_H, 10);
+      this.bannerBg
+        .lineStyle(2, Phaser.Display.Color.HexStringToColor(PALETTE.treat).color, 0.9)
+        .strokeRoundedRect(BANNER_X, BANNER_Y, BANNER_W, BANNER_H, 10);
+      this.texts.tutStep.setText(`STEP ${tut.step} OF ${tut.total}`).setX(BANNER_X + BANNER_PAD);
+      this.texts.tutTitle.setText(tut.title).setX(BANNER_X + BANNER_PAD);
+      this.texts.tutBody.setText(tut.body).setX(BANNER_X + BANNER_PAD);
+      this.texts.tutProgress.setText(tut.progress);
+    }
+
     // Header
-    this.texts.timer.setText(`⏰ ${formatClock(s.secondsLeft)}`);
+    // A tutorial has no round clock at all, so show nothing rather than a
+    // 20:00 that never moves.
+    this.texts.timer.setText(s.secondsLeft === null ? '' : `⏰ ${formatClock(s.secondsLeft)}`);
     this.texts.score.setText(
       `🐺 ${HUSKY_NAME} ${s.huskyFood.toFixed(0)}     🐕 ${CHI_NAME} ${s.chiFood.toFixed(0)}`,
     );
