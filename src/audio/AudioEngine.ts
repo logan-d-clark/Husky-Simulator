@@ -82,6 +82,11 @@ export class AudioEngine {
     return this.muted;
   }
 
+  /** Whether sound can actually be heard right now — false until a gesture unlocks the context. */
+  isRunning(): boolean {
+    return this.ctx?.state === 'running';
+  }
+
   toggleMute(): boolean {
     this.muted = !this.muted;
     this.applyVolumes();
@@ -144,6 +149,13 @@ export class AudioEngine {
 
   private pump(): void {
     if (!this.ctx || !this.musicGain) return;
+    // Nothing goes into a context that is not running. A suspended context's
+    // clock is frozen, so bars queued against it all pile onto the first second
+    // after the unlock — which, if the player unlocked by pressing Start, means
+    // the menu theme bleeding over the opening of the in-game bed. The pump
+    // keeps ticking; barsToSchedule resyncs to the live clock on the first wake
+    // after the context comes up.
+    if (this.ctx.state !== 'running') return;
     this.applyVolumes();
     const { barSeconds, notes } = TRACKS[this.track];
     const { times, nextBarAt } = barsToSchedule(
@@ -162,6 +174,21 @@ export class AudioEngine {
   stopMusic(): void {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    if (!this.ctx || !this.musicGain) return;
+    // Clearing the timer only stops NEW bars being queued: up to SCHEDULE_AHEAD
+    // seconds of music is already committed to the audio clock and cannot be
+    // un-scheduled. Left alone it plays on over whatever comes next — the menu
+    // theme stumbling over the opening of the in-game bed. So retire the whole
+    // music channel: fade it out fast enough to be inaudible, slow enough not to
+    // click, and hand the next track a fresh one.
+    const retired = this.musicGain;
+    const now = this.ctx.currentTime;
+    retired.gain.cancelScheduledValues(now);
+    retired.gain.setValueAtTime(retired.gain.value, now);
+    retired.gain.linearRampToValueAtTime(0.0001, now + 0.08);
+    setTimeout(() => retired.disconnect(), (SCHEDULE_AHEAD + 1) * 1000);
+    this.musicGain = this.ctx.createGain();
+    this.musicGain.connect(this.master!);
   }
 }
 

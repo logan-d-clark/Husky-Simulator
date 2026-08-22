@@ -18,6 +18,7 @@ function sizeAndHit(cont: Phaser.GameObjects.Container, w: number, h: number): v
 export class MenuScene extends Phaser.Scene {
   private difficulty: Difficulty = DEFAULT_DIFFICULTY;
   private devMode = false;
+  private soundHint: Phaser.GameObjects.Text | null = null;
   constructor() {
     super('Menu');
   }
@@ -25,6 +26,7 @@ export class MenuScene extends Phaser.Scene {
   create() {
     this.difficulty = DEFAULT_DIFFICULTY;
     this.devMode = false;
+    this.soundHint = null; // the old one went down with the previous scene
     const W = this.scale.width,
       H = this.scale.height,
       cx = W / 2;
@@ -99,8 +101,32 @@ export class MenuScene extends Phaser.Scene {
     });
     this.button(cx, layout.howToPlayY, 240, 46, 'How to Play', false, () => this.scene.start('Instructions'));
 
+    // No browser will play audio before the page has been interacted with, so on
+    // a cold load the theme is ready but silent, and the only click most players
+    // make here is the one that leaves for the game. Ask for the click, and get
+    // out of the way the moment sound is live — coming back from a round, the
+    // context is already running and this never appears.
+    if (!audio.isRunning() && !audio.isMuted()) {
+      this.soundHint = this.add
+        .text(cx, layout.howToPlayY + 52, '🔊  Click anywhere for sound', {
+          fontFamily: DISPLAY_FONT,
+          fontSize: '15px',
+          color: '#5e492c',
+          fontStyle: 'bold',
+        })
+        .setOrigin(0.5)
+        .setAlpha(0.75);
+    }
+
     // Dev mode lives out of the way in the bottom-left corner.
     this.buildDevToggle(96, H - 48);
+  }
+
+  update() {
+    const hint = this.soundHint;
+    if (!hint || !audio.isRunning()) return;
+    this.soundHint = null; // fade it once, then let it go
+    this.tweens.add({ targets: hint, alpha: 0, duration: 400, onComplete: () => hint.destroy() });
   }
 
   private drawScene(W: number, H: number, horizon: number) {
