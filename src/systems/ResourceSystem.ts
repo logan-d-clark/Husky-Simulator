@@ -26,7 +26,9 @@ export const ResourceSystem = {
   // Full end-of-game gate including the round timer. (Dev mode's invincibility
   // is applied at the call site, which simply skips this check.)
   shouldEndGame(inv: Inventory, secondsLeft: number): 'Time' | 'Food' | 'Water' | null {
-    if (secondsLeft <= 0) return 'Time';
-    return this.isGameOver(inv);
+    // Running out is checked FIRST: on the tick where the clock hits zero and a
+    // bar empties together, reporting 'Time' would print "lasted the whole day"
+    // over a starved dog and hand him the win. Dying beats the buzzer.
+    return this.isGameOver(inv) ?? (secondsLeft <= 0 ? 'Time' : null);
   },
 };

@@ -30,7 +30,7 @@ import {
   isWaterAdjacent,
   firstReachableRelieveTarget,
   banditGoalLabel,
-  bestFoodAnywhere,
+  firstReachableFood,
   bfsFirstStep,
   type RelieveTarget,
 } from '../systems/AISystem';
@@ -118,6 +118,11 @@ export class GameScene extends Phaser.Scene {
     label: Phaser.GameObjects.Text;
   })[] = [];
   private zoomSecondsLeft = 0;
+  // The treat the zoomies are currently heading for. Held across steps: picking
+  // afresh each tile oscillates, because the step comes from a real path that
+  // often moves AWAY in straight-line terms to get round a fence, which then
+  // re-ranks the manhattan-scored targets and sends him back.
+  private zoomTarget: TileCoord | null = null;
   private itemTickInSecond = 0;
 
   // --- tutorial ------------------------------------------------------------
@@ -204,6 +209,7 @@ export class GameScene extends Phaser.Scene {
     this.rawhide = null;
     this.repellers = [];
     this.zoomSecondsLeft = 0;
+    this.zoomTarget = null;
     this.itemTickInSecond = 0;
     // Per-run like everything above it — Phaser does not reset class fields.
     this.director = this.tutorial ? new TutorialDirector() : null;
@@ -415,15 +421,26 @@ export class GameScene extends Phaser.Scene {
   }
 
   private zoomDirection(): Direction | undefined {
-    const food = bestFoodAnywhere(this.husky.tile, this.foods);
-    if (!food) {
-      this.zoomSecondsLeft = 0;
+    // Stay on the committed treat while it still exists and can still be
+    // reached. Re-deciding every step is what made him pace between two tiles
+    // in a fenced yard forever.
+    if (this.zoomTarget) {
+      const t = this.zoomTarget;
+      const stillThere = this.foods.some((f) => f.tile.col === t.col && f.tile.row === t.row);
+      if (stillThere) {
+        const dir = bfsFirstStep(this.grid, this.husky.tile, (c) => c.col === t.col && c.row === t.row);
+        if (dir) return dir;
+      }
+      this.zoomTarget = null; // eaten, or walled off — pick again
+    }
+
+    const next = firstReachableFood(this.grid, this.husky.tile, this.foods);
+    if (!next) {
+      this.zoomSecondsLeft = 0; // nothing left he can get to: hand control back
       return undefined;
-    } // map is bare: hand control back early
-    return (
-      bfsFirstStep(this.grid, this.husky.tile, (t) => t.col === food.tile.col && t.row === food.tile.row) ??
-      undefined
-    );
+    }
+    this.zoomTarget = { ...next.food.tile };
+    return next.dir;
   }
 
   // Chihuahua step: pathfind one tile toward the nearest treat and glide there,
@@ -798,6 +815,7 @@ export class GameScene extends Phaser.Scene {
       yardAffection: tile.ownerId === 0 ? 0 : owner.affection,
       items: this.items,
       banditPenned: this.gateShut(),
+      zooming: this.zoomSecondsLeft > 0,
     };
   }
 
@@ -812,6 +830,7 @@ export class GameScene extends Phaser.Scene {
       title: stage.title,
       body: stage.body,
       progress: d.progressText(this.tutorialState()),
+      highlight: stage.highlight ?? null,
     };
   }
 
@@ -859,7 +878,10 @@ export class GameScene extends Phaser.Scene {
     const from = this.husky.tile;
     const near = this.map.tiles
       .flat()
-      .filter((t) => t.type === 'grass' || t.type === 'pavement')
+      // Family lawns only. Real food never appears in the street, and spawning
+      // there taught the opposite: measured before this, 7 of the 9 nearest
+      // candidates to the start tile were pavement.
+      .filter((t) => t.type === 'grass' && t.ownerId !== 0)
       .filter((t) => !t.foodPresent && !this.foods.some((f) => f.tile.col === t.col && f.tile.row === t.row))
       .map((t) => ({ t, d: Math.abs(t.col - from.col) + Math.abs(t.row - from.row) }))
       // Reachability, not just distance: while the gate is shut the map is two
@@ -888,6 +910,7 @@ export class GameScene extends Phaser.Scene {
     if (!d || d.isFinished() || this.panelUp) return;
     const stage = d.stage();
     if (stage) this.applyTutorialSetup(stage.id, stage.setup);
+    d.bump('tick'); // lets a stage require being on screen long enough to read
 
     const warning = d.warningFor(this.husky.inv);
     if (warning) {
@@ -923,9 +946,11 @@ export class GameScene extends Phaser.Scene {
   private showTutorialSummary() {
     this.showTutorialPanel(
       "That's the lot.",
-      'WASD to move, Q drink, E trick, C poop, Z pee. Items 1-4: rawhide pins Bandit, ' +
-        'repeller fences him out, diaper empties you cleanly, chew gives you the zoomies. ' +
-        'Keep a yard happy and it feeds you better. Go get some treats.',
+      'WASD move, Q quench, E exercise, C crap, Z the noise. Items 1-4 turn up around the map ' +
+        'as you play: rawhide pins Bandit, repeller fences him out, diaper empties you cleanly, ' +
+        'chew gives you the zoomies. Keep a lawn happy and it feeds you better — but Bandit ' +
+        'heads for whichever one likes you most. To win: last the whole day without your food ' +
+        'or water hitting zero, AND finish with more food than he does.',
       'click or press a key to return to the menu',
       () => this.leaveTutorial(),
     );

@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { PALETTE } from '../config/palette';
 import { HUSKY_NAME, CHI_NAME } from '../config/names';
+import { roundOutcome } from '../systems/Outcome';
 
 import { DEFAULT_DIFFICULTY, type Difficulty } from '../config/difficulty';
 
@@ -38,7 +39,9 @@ export class GameOverScene extends Phaser.Scene {
     this.add
       .text(cx, 210, reasonText[this.meta.reason], { fontSize: '24px', color: '#ffffff' })
       .setOrigin(0.5);
-    const won = this.meta.huskyFood >= this.meta.chiFood;
+    // The rule lives in one tested place now: winning needs BOTH lasting the
+    // round and finishing ahead, and the outcome carries its own copy.
+    const outcome = roundOutcome(this.meta.reason, this.meta.huskyFood, this.meta.chiFood);
     this.add
       .text(cx, 290, `${HUSKY_NAME} finished with ${this.meta.huskyFood.toFixed(0)} food`, {
         fontSize: '26px',
@@ -52,9 +55,17 @@ export class GameOverScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
     this.add
-      .text(cx, 380, won ? `${HUSKY_NAME} wins! 🏆` : `${CHI_NAME} won this time…`, {
+      .text(cx, 380, outcome.headline, {
         fontSize: '28px',
-        color: won ? '#ffd27f' : '#ff8a8a',
+        color: outcome.won ? '#ffd27f' : '#ff8a8a',
+      })
+      .setOrigin(0.5);
+    this.add
+      .text(cx, 418, outcome.detail, {
+        fontSize: '16px',
+        color: '#dddddd',
+        align: 'center',
+        wordWrap: { width: 620 },
       })
       .setOrigin(0.5);
     const btn = (y: number, label: string, fn: () => void) => {

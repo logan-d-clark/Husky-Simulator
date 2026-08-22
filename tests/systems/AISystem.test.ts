@@ -14,6 +14,7 @@ import {
   banditGoalLabel,
   firstReachableRelieveTarget,
   bfsFirstStep,
+  firstReachableFood,
   type Bandit,
   type RelieveTarget,
 } from '../../src/systems/AISystem';
@@ -526,5 +527,63 @@ describe('nextBanditMove — rawhide goal', () => {
       blocked: (t) => t.col === 3,
     });
     expect(move).toEqual({ dir: 'left', mode: 'chase' }); // goes for the treat instead
+  });
+});
+
+describe('firstReachableFood', () => {
+  const at = (col: number, row = 0) => ({ col, row });
+  const food = (col: number, row: number, value = 10, type: Food['type'] = 'treat'): Food => ({
+    type,
+    value,
+    tile: at(col, row),
+  });
+
+  it('returns nothing when there is no food', () => {
+    const line = new Grid(parseMap('P0,P0,P0'));
+    expect(firstReachableFood(line, at(0), [])).toBeNull();
+  });
+
+  it('heads for the best-scoring food and reports which one', () => {
+    const line = new Grid(parseMap('P0,P0,P0,P0,P0'));
+    const bag = food(4, 0, 40, 'bag');
+    const hit = firstReachableFood(line, at(2), [food(1, 0, 10), bag]);
+    expect(hit?.food).toBe(bag); // 40/3 beats 10/2
+    expect(hit?.dir).toBe('right');
+  });
+
+  it('SKIPS a higher-scoring food it cannot path to', () => {
+    // Tempting by straight-line distance, walled off in practice. Returning it
+    // would hand the caller a target with no route.
+    const grid = new Grid(parseMap('P0,P0,H0,P0,P0'));
+    const walled = food(4, 0, 40, 'bag');
+    const hit = firstReachableFood(grid, at(1), [walled, food(0, 0, 10)]);
+    expect(hit?.food.tile).toEqual(at(0));
+    expect(hit?.dir).toBe('left');
+  });
+
+  it('returns nothing when every food is unreachable', () => {
+    const grid = new Grid(parseMap('P0,H0,P0'));
+    expect(firstReachableFood(grid, at(0), [food(2, 0)])).toBeNull();
+  });
+
+  it('never returns a step into a blocked zone', () => {
+    const line = new Grid(parseMap('P0,P0,P0,P0,P0'));
+    const hit = firstReachableFood(line, at(2), [food(4, 0)], (t) => t.col === 3);
+    expect(hit).toBeNull();
+  });
+
+  it('is stable from one tile to the next along its own path', () => {
+    // The oscillation guard: walking the returned step must not flip the choice
+    // back and forth between two foods.
+    const line = new Grid(parseMap('P0,P0,P0,P0,P0,P0,P0'));
+    const foods = [food(0, 0, 10), food(6, 0, 40, 'bag')];
+    let pos = at(3);
+    const chosen: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const hit = firstReachableFood(line, pos, foods);
+      chosen.push(`${hit!.food.tile.col}`);
+      pos = line.neighbor(pos, hit!.dir);
+    }
+    expect(new Set(chosen).size).toBe(1); // same target throughout
   });
 });
