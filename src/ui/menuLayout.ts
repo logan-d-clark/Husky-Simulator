@@ -4,6 +4,7 @@ export interface MenuLayout {
   challengeHeadingY: number;
   difficultyY: number;
   startY: number;
+  tutorialY: number;
   howToPlayY: number;
 }
 
@@ -13,6 +14,7 @@ export function buildMenuLayout(horizonY: number): MenuLayout {
     challengeHeadingY: horizonY + 30,
     difficultyY: horizonY + 70,
     startY: horizonY + 150,
-    howToPlayY: horizonY + 222,
+    tutorialY: horizonY + 214,
+    howToPlayY: horizonY + 272,
   };
 }

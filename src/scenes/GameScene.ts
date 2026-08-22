@@ -38,7 +38,7 @@ import { OwnerRegistry, dispenseOverMap, buildRelieveTargets } from '../systems/
 import { BanditController, type BanditTickInput } from '../systems/BanditController';
 import { createBadges, updateBadges, type Badge } from '../ui/HouseholdProfile';
 import type { Direction, TileCoord } from '../types';
-import { takeFoodAt, type Food } from '../entities/Food';
+import { takeFoodAt, foodValue, type Food } from '../entities/Food';
 import {
   getDifficultySettings,
   banditDelaySeconds,
@@ -52,6 +52,8 @@ import { eatCue, cueForBanditGoal } from '../audio/cues';
 import { WarningTracker, risingEdges } from '../audio/triggers';
 import type { BanditGoal } from '../systems/AISystem';
 import { computeFov } from '../world/fov';
+import { TutorialDirector, WARNINGS } from '../systems/TutorialDirector';
+import type { TutorialEvent, TutorialSetup } from '../systems/TutorialScript';
 
 export class GameScene extends Phaser.Scene {
   private map!: GameMap;
@@ -92,6 +94,10 @@ export class GameScene extends Phaser.Scene {
   private gateSprites: Phaser.GameObjects.Image[] = [];
   private gateSecondsLeft = 0;
   private gateTickInSecond = 0;
+  // The tutorial holds him with no clock running until its Bandit stage starts
+  // one. Modelled as a flag rather than an enormous gateSecondsLeft, because the
+  // HUD renders that value as M:SS and a sentinel reads as "150119987579016:29".
+  private gateHeld = false;
 
   // --- items ---------------------------------------------------------------
   private items: ItemCounts = emptyCounts();
@@ -113,6 +119,17 @@ export class GameScene extends Phaser.Scene {
   })[] = [];
   private zoomSecondsLeft = 0;
   private itemTickInSecond = 0;
+
+  // --- tutorial ------------------------------------------------------------
+  // The walkthrough layers onto the REAL game rather than forking it: the
+  // director decides the lesson, and these gates only make the world
+  // predictable enough to teach in. All of them are inert in a normal round.
+  private tutorial = false;
+  private director: TutorialDirector | null = null;
+  private tutorialSetupDone = new Set<string>();
+  // A slow frame drains several sim ticks in one update(); without this a
+  // second panel launched in the next tick would replace the first unread.
+  private panelUp = false;
   private foods: Food[] = [];
   private foodSprites = new Map<string, Phaser.GameObjects.Image>();
   private secondsLeft = config.GAME_SECONDS;
@@ -127,7 +144,8 @@ export class GameScene extends Phaser.Scene {
 
   // Phaser runs init(data) before create() on every scene.start, so the
   // difficulty chosen on the menu is resolved here (default Normal if absent).
-  init(data?: { difficulty?: Difficulty; devMode?: boolean }) {
+  init(data?: { difficulty?: Difficulty; devMode?: boolean; tutorial?: boolean }) {
+    this.tutorial = data?.tutorial ?? false;
     this.difficulty = data?.difficulty ?? DEFAULT_DIFFICULTY;
     const settings = getDifficultySettings(this.difficulty);
     this.chiSpeedMultiplier = settings.chiSpeedMultiplier;
@@ -171,6 +189,9 @@ export class GameScene extends Phaser.Scene {
     this.tileSprites = [];
     this.fovSet = null;
     this.gateSprites = [];
+    // The tutorial holds him until its Bandit stage opens the gate explicitly.
+    // The tutorial holds him with no clock until its Bandit stage starts one.
+    this.gateHeld = this.tutorial;
     this.gateSecondsLeft = banditDelaySeconds(this.difficulty);
     this.gateTickInSecond = 0;
     // Items are per-run state too — Phaser does not reset class fields.
@@ -184,6 +205,10 @@ export class GameScene extends Phaser.Scene {
     this.repellers = [];
     this.zoomSecondsLeft = 0;
     this.itemTickInSecond = 0;
+    // Per-run like everything above it — Phaser does not reset class fields.
+    this.director = this.tutorial ? new TutorialDirector() : null;
+    this.tutorialSetupDone = new Set();
+    this.panelUp = false;
 
     this.map = parseMap(mapCsv);
     this.grid = new Grid(this.map);
@@ -265,7 +290,9 @@ export class GameScene extends Phaser.Scene {
       water: this.husky.inv.water,
       poop: this.husky.inv.poop,
       pee: this.husky.inv.pee,
-      secondsLeft: this.secondsLeft,
+      // Null during a tutorial: the clock is deliberately frozen, and a static
+      // 20:00 reads as a broken timer rather than an absent one.
+      secondsLeft: this.tutorial ? null : this.secondsLeft,
       huskyFood: this.husky.inv.food,
       chiFood: this.chihuahua.inv.food,
       chiWater: this.chihuahua.inv.water,
@@ -277,8 +304,9 @@ export class GameScene extends Phaser.Scene {
       ),
       // Read straight off the gate's own clock rather than a mirrored copy, so
       // the number on screen cannot drift from the moment he actually gets out.
+      tutorial: this.tutorialBanner(),
       chiPenned: this.gateShut(),
-      chiPennedSeconds: this.gateSecondsLeft,
+      chiPennedSeconds: this.gateHeld ? null : this.gateSecondsLeft,
       items: { ...this.items },
       currentTile: { heat: t.heat, dirt: t.dirt, destruction: t.destruction, ownerId: t.ownerId },
     };
@@ -327,6 +355,9 @@ export class GameScene extends Phaser.Scene {
     kb.addKey('E').on('up', () => {
       if (this.action === 'trick') this.action = null;
     });
+    // Esc abandons a walkthrough. Only bound during one, so a normal round is
+    // unaffected.
+    if (this.tutorial) kb.addKey('ESC').on('down', () => this.leaveTutorial());
     kb.addKey('M').on('down', () => {
       audio.toggleMute();
     });
@@ -369,6 +400,7 @@ export class GameScene extends Phaser.Scene {
     const to = this.grid.neighbor(this.husky.tile, dir);
     this.husky.tile = to;
     if (!zooming) ResourceSystem.applyMoveCost(this.husky.inv); // the chew is free while it lasts
+    this.bumpTutorial('stepped');
     this.moving = true;
     this.advanceEntity(
       this.huskySprite,
@@ -552,6 +584,9 @@ export class GameScene extends Phaser.Scene {
     // One cue per action START, then silence until he lets go and begins again.
     const applied = { poop: poopApplied, pee: peeApplied, trick: trickApplied, drink: drinkApplied };
     for (const started of risingEdges(this.actionsApplied, applied)) audio.play(started);
+    if (poopApplied) this.bumpTutorial('pooped');
+    if (trickApplied) this.bumpTutorial('tricked');
+    if (drinkApplied) this.bumpTutorial('drank');
     this.actionsApplied = applied;
     for (const warning of this.warnings.check(this.husky.inv)) audio.play(warning);
 
@@ -571,15 +606,17 @@ export class GameScene extends Phaser.Scene {
     this.badgeTickCounter = (this.badgeTickCounter + 1) % 5;
     if (this.badgeTickCounter === 0) updateBadges(this.badges, this.ownerRegistry);
 
-    // 4) food dispensing
-    dispenseOverMap(this.map, this.ownerRegistry, Math.random, (food) => {
-      this.foods.push(food);
-      const p = this.grid.tileToPixel(food.tile);
-      const spr = this.add.image(p.x, p.y, food.type).setDepth(8);
-      const fk = this.fkey(food.tile.col, food.tile.row);
-      this.foodSprites.set(fk, spr);
-      if (this.fovSet && !this.fovSet.has(fk)) spr.setVisible(false); // dropped out of sight
-    });
+    // 4) food dispensing. The tutorial places exactly what each stage needs
+    //    instead, so a lesson never waits on luck.
+    if (!this.tutorial)
+      dispenseOverMap(this.map, this.ownerRegistry, Math.random, (food) => {
+        this.foods.push(food);
+        const p = this.grid.tileToPixel(food.tile);
+        const spr = this.add.image(p.x, p.y, food.type).setDepth(8);
+        const fk = this.fkey(food.tile.col, food.tile.row);
+        this.foodSprites.set(fk, spr);
+        if (this.fovSet && !this.fovSet.has(fk)) spr.setVisible(false); // dropped out of sight
+      });
 
     // 5) chihuahua (Bandit) AI. The controller runs his stay-put commitments
     //    (full water refill, fouling a yard); while committed he holds position
@@ -587,19 +624,24 @@ export class GameScene extends Phaser.Scene {
     this.updateBandit();
 
     // 6) sim-time / game-over. Dev mode freezes the clock and is invincible.
-    // Item drops and the milestone payout run every tick.
-    this.itemDropTick();
+    // Item drops and the milestone payout run every tick. The tutorial hands
+    // out items on a schedule instead, so it suppresses both.
+    if (!this.tutorial) this.itemDropTick();
     // Item countdowns run on their own second, independent of the round clock so
     // they keep working in dev mode (the trap the gate fell into in #29).
     this.itemTickInSecond = (this.itemTickInSecond + 1) % TICKS_PER_SECOND;
     if (this.itemTickInSecond === 0) this.itemSecondTick();
+
+    // The walkthrough, if this is one: set up the stage, check its objective,
+    // coach any mistake. Inert in a normal round.
+    if (this.tutorial) this.tutorialTick();
 
     // Bandit works out the latch. The gate runs on its OWN clock, deliberately
     // outside the dev-mode freeze: dev mode stops the round timer, and nesting
     // the gate inside that would leave it shut for the whole session — killing
     // every Bandit knob the dev panel exists to tune, in the only mode that has
     // a dev panel.
-    if (this.gateShut()) {
+    if (this.gateShut() && !this.gateHeld) {
       this.gateTickInSecond = (this.gateTickInSecond + 1) % TICKS_PER_SECOND;
       if (this.gateTickInSecond === 0) {
         const next = advanceGateSeconds(this.gateSecondsLeft);
@@ -608,11 +650,13 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    if (!this.devMode) {
+    if (!this.devMode && !this.tutorial) {
       this.tickInSecond = (this.tickInSecond + 1) % TICKS_PER_SECOND;
       if (this.tickInSecond === 0) this.secondsLeft -= 1;
     }
-    const end = this.devMode ? null : ResourceSystem.shouldEndGame(this.husky.inv, this.secondsLeft);
+    // Nothing can end a tutorial run — a mistake raises a coaching panel instead.
+    const end =
+      this.devMode || this.tutorial ? null : ResourceSystem.shouldEndGame(this.husky.inv, this.secondsLeft);
     if (end) {
       this.endGame(end);
       return;
@@ -658,6 +702,7 @@ export class GameScene extends Phaser.Scene {
     if (food) {
       ResourceSystem.eatFood(this.husky.inv, food.value);
       audio.playSteps(eatCue(food.value, config.TREAT_VALUE)); // richer pickup, higher pitch
+      this.bumpTutorial('ate');
       this.currentTile().foodPresent = false;
       const key = this.fkey(food.tile.col, food.tile.row);
       this.foodSprites.get(key)?.destroy();
@@ -741,6 +786,160 @@ export class GameScene extends Phaser.Scene {
     return this.gateSprites.length > 0;
   }
 
+  // ------------------------------------------------------------- tutorial ---
+
+  /** Snapshot the director's objectives read. */
+  private tutorialState() {
+    const tile = this.currentTile();
+    const owner = this.ownerRegistry.get(tile.ownerId);
+    return {
+      inv: this.husky.inv,
+      onFamilyYard: tile.type === 'grass' && tile.ownerId !== 0,
+      yardAffection: tile.ownerId === 0 ? 0 : owner.affection,
+      items: this.items,
+      banditPenned: this.gateShut(),
+    };
+  }
+
+  /** What UIScene draws in the tutorial banner, or null in a normal round. */
+  private tutorialBanner() {
+    const d = this.director;
+    const stage = d?.stage();
+    if (!d || !stage) return null;
+    return {
+      step: d.stageNumber(),
+      total: d.totalStages(),
+      title: stage.title,
+      body: stage.body,
+      progress: d.progressText(this.tutorialState()),
+    };
+  }
+
+  /** Report something the player really did, so objectives can count it. */
+  private bumpTutorial(event: TutorialEvent) {
+    this.director?.bump(event);
+  }
+
+  /**
+   * Make the current stage's lesson reachable. Setups are declarative in the
+   * script and interpreted here, which is what keeps the script pure — and they
+   * run ONCE per stage, keyed by id, so a stage cannot keep re-granting.
+   */
+  private applyTutorialSetup(id: string, setup?: TutorialSetup) {
+    if (!setup) return;
+
+    // Continuous: whichever yard he is on is topped up to the floor this stage
+    // needs, every tick. A one-shot boost would land on pavement whenever he
+    // happened to be on the street, leaving the lesson ~40 tricks away.
+    if (setup.boostAffection !== undefined) {
+      const tile = this.currentTile();
+      if (tile.type === 'grass' && tile.ownerId !== 0) {
+        const owner = this.ownerRegistry.get(tile.ownerId);
+        owner.affection = Math.max(owner.affection, setup.boostAffection);
+      }
+    }
+
+    // Everything else fires once per stage, keyed by id, so a stage cannot keep
+    // re-granting an item or re-filling a bar the player just emptied.
+    if (this.tutorialSetupDone.has(id)) return;
+    this.tutorialSetupDone.add(id);
+    if (setup.spawnTreats) this.spawnTreatsNearHusky(setup.spawnTreats);
+    if (setup.grantItem) grant(this.items, setup.grantItem);
+    if (setup.fillPoop) this.husky.inv.poop = config.POOP_MAX;
+    if (setup.fillPee) this.husky.inv.pee = config.PEE_MAX;
+    if (setup.drainWater) this.husky.inv.water = Math.min(this.husky.inv.water, config.WATER_CAP * 0.35);
+    if (setup.banditCountdown !== undefined && this.gateShut()) {
+      this.gateSecondsLeft = setup.banditCountdown;
+      this.gateHeld = false; // the clock starts now
+    }
+  }
+
+  /** Scatter treats on walkable tiles near Blizzard so a lesson is in reach. */
+  private spawnTreatsNearHusky(count: number) {
+    const from = this.husky.tile;
+    const near = this.map.tiles
+      .flat()
+      .filter((t) => t.type === 'grass' || t.type === 'pavement')
+      .filter((t) => !t.foodPresent && !this.foods.some((f) => f.tile.col === t.col && f.tile.row === t.row))
+      .map((t) => ({ t, d: Math.abs(t.col - from.col) + Math.abs(t.row - from.row) }))
+      // Reachability, not just distance: while the gate is shut the map is two
+      // disjoint components, and a treat landing inside Bandit's pen would be an
+      // unreachable objective on stage one.
+      .filter((x) => x.d > 1 && x.d <= 8)
+      .filter((x) => bfsFirstStep(this.grid, from, (c) => c.col === x.t.col && c.row === x.t.row) !== null)
+      .sort((a, b) => a.d - b.d)
+      .slice(0, count * 3);
+    for (let i = 0; i < count && near.length > 0; i++) {
+      const pick = near.splice(Math.floor(Math.random() * near.length), 1)[0].t;
+      const food: Food = { type: 'treat', value: foodValue('treat'), tile: { col: pick.col, row: pick.row } };
+      this.foods.push(food);
+      pick.foodPresent = true;
+      const px = this.grid.tileToPixel(food.tile);
+      const spr = this.add.image(px.x, px.y, 'treat').setDepth(8);
+      const fk = this.fkey(pick.col, pick.row);
+      this.foodSprites.set(fk, spr);
+      if (this.fovSet && !this.fovSet.has(fk)) spr.setVisible(false); // dropped out of sight
+    }
+  }
+
+  /** One tick of the walkthrough: set up, check the objective, coach mistakes. */
+  private tutorialTick() {
+    const d = this.director;
+    if (!d || d.isFinished() || this.panelUp) return;
+    const stage = d.stage();
+    if (stage) this.applyTutorialSetup(stage.id, stage.setup);
+
+    const warning = d.warningFor(this.husky.inv);
+    if (warning) {
+      this.showTutorialPanel(
+        WARNINGS[warning].title,
+        WARNINGS[warning].body,
+        'click or press a key to carry on',
+      );
+      return; // one panel at a time; the objective is still there afterwards
+    }
+
+    const { finished } = d.update(this.tutorialState());
+    if (finished) this.showTutorialSummary();
+  }
+
+  private showTutorialPanel(title: string, body: string, footer: string, onDismiss?: () => void) {
+    this.panelUp = true;
+    this.scene.pause();
+    this.scene.pause('UI');
+    this.scene.launch('TutorialPanel', {
+      title,
+      body,
+      footer,
+      resume: () => {
+        this.panelUp = false;
+        this.scene.resume();
+        this.scene.resume('UI');
+        onDismiss?.();
+      },
+    });
+  }
+
+  private showTutorialSummary() {
+    this.showTutorialPanel(
+      "That's the lot.",
+      'WASD to move, Q drink, E trick, C poop, Z pee. Items 1-4: rawhide pins Bandit, ' +
+        'repeller fences him out, diaper empties you cleanly, chew gives you the zoomies. ' +
+        'Keep a yard happy and it feeds you better. Go get some treats.',
+      'click or press a key to return to the menu',
+      () => this.leaveTutorial(),
+    );
+  }
+
+  private leaveTutorial() {
+    // Same teardown contract as endGame: leaving GameScene stops the bed.
+    // Without this the in-game music plays on over the menu for the rest of the
+    // session, since startMusic() early-returns while its timer is still set.
+    audio.stopMusic();
+    this.scene.stop('UI');
+    this.scene.start('Menu');
+  }
+
   // ---------------------------------------------------------------- items ---
 
   /** Tiles Bandit refuses to enter right now. Blizzard is never passed this. */
@@ -792,6 +991,7 @@ export class GameScene extends Phaser.Scene {
   private deployItem(type: ItemType) {
     if (this.over || this.zoomSecondsLeft > 0) return; // no deploying mid-zoomies
     if (!consume(this.items, type)) return; // pressed a key for one he hasn't got
+    this.bumpTutorial(`used:${type}`);
     const tile = { ...this.husky.tile };
     const p = this.grid.tileToPixel(tile);
     if (type === 'rawhide') {
