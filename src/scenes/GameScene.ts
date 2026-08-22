@@ -957,9 +957,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   private leaveTutorial() {
-    // Same teardown contract as endGame: leaving GameScene stops the bed.
-    // Without this the in-game music plays on over the menu for the rest of the
-    // session, since startMusic() early-returns while its timer is still set.
+    // Same teardown contract as endGame: leaving GameScene stops the bed. The
+    // menu starts its own theme on create, so this only covers the gap between
+    // the two scenes — but without it that gap plays the in-game bed.
     audio.stopMusic();
     this.scene.stop('UI');
     this.scene.start('Menu');
