@@ -77,9 +77,17 @@ export class MenuScene extends Phaser.Scene {
     // resume() from a Phaser handler is no longer inside the gesture's call
     // stack. Chrome/Firefox accept that (sticky activation); WebKit does not, so
     // also unlock from a native listener the first time anything is pressed.
-    const unlock = () => audio.resume();
+    const unlock = () => {
+      audio.resume();
+      audio.startMusic('theme');
+    };
     document.addEventListener('pointerdown', unlock, { once: true });
     document.addEventListener('keydown', unlock, { once: true });
+    // Queue the theme now too: a context that is still suspended keeps its clock
+    // frozen, so the opening bars simply wait there and play the instant the
+    // first gesture unlocks it. Returning from the game hits this path with the
+    // context already live.
+    audio.startMusic('theme');
 
     this.button(cx, layout.startY, 240, 56, 'Start', true, () => {
       audio.resume();

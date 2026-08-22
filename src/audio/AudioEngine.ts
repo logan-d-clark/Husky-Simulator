@@ -1,7 +1,8 @@
 import { config } from '../config/gameConfig';
 import { placePhrase, type ToneStep } from './tones';
 import { CUES, type CueName } from './cues';
-import { barNotes, barsToSchedule, mulberry32 } from './music';
+import { barNotes, barsToSchedule, mulberry32, BAR_SECONDS } from './music';
+import { themeNotes, THEME_BAR_SECONDS } from './theme';
 
 // The only browser-coupled file in src/audio. Everything it plays is decided by
 // the pure modules; this just turns tone steps into oscillators. Kept thin on
@@ -14,6 +15,23 @@ const LOOKAHEAD_MS = 250; // how often the scheduler wakes
 // throttled wake lands after the bar it was meant to queue.
 const SCHEDULE_AHEAD = 1.5; // seconds of music queued in advance
 
+export type TrackName = 'game' | 'theme';
+
+/** What the scheduler needs to know about a piece: how long a bar is, and what's in it. */
+const TRACKS: Record<
+  TrackName,
+  { barSeconds: number; notes: (bar: number, rng: () => number) => ToneStep[] }
+> = {
+  game: {
+    barSeconds: BAR_SECONDS,
+    notes: (bar, rng) => {
+      const { bass, lead } = barNotes(bar, rng);
+      return [...bass, ...lead];
+    },
+  },
+  theme: { barSeconds: THEME_BAR_SECONDS, notes: themeNotes },
+};
+
 export class AudioEngine {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
@@ -23,6 +41,7 @@ export class AudioEngine {
   private nextBarAt = 0;
   private bar = 0;
   private rng = mulberry32(0x5eed);
+  private track: TrackName = 'game';
   private muted = false;
 
   private ensure(): boolean {
@@ -101,8 +120,20 @@ export class AudioEngine {
     this.schedule(steps, this.ctx.currentTime, this.sfxGain);
   }
 
-  startMusic(): void {
-    if (!this.ensure() || !this.ctx || this.timer) return;
+  /**
+   * Start (or switch to) a track. Calling it again for the track already playing
+   * is a no-op, so scenes can assert what should be playing without restarting
+   * the music every time one of them wakes.
+   */
+  startMusic(track: TrackName = 'game'): void {
+    if (this.timer && this.track === track) return;
+    this.stopMusic();
+    if (!this.ensure() || !this.ctx) return;
+    this.track = track;
+    // Restart the form, so a piece with structure always begins at its opening
+    // bar rather than wherever the previous track happened to leave the count.
+    this.bar = 0;
+    this.rng = mulberry32(0x5eed);
     this.nextBarAt = this.ctx.currentTime + 0.15;
     // The scheduler accumulates bar times off ctx.currentTime rather than
     // stepping a wall-clock interval — a setInterval-driven clock drifts audibly
@@ -114,11 +145,15 @@ export class AudioEngine {
   private pump(): void {
     if (!this.ctx || !this.musicGain) return;
     this.applyVolumes();
-    const { times, nextBarAt } = barsToSchedule(this.nextBarAt, this.ctx.currentTime, SCHEDULE_AHEAD);
+    const { barSeconds, notes } = TRACKS[this.track];
+    const { times, nextBarAt } = barsToSchedule(
+      this.nextBarAt,
+      this.ctx.currentTime,
+      SCHEDULE_AHEAD,
+      barSeconds,
+    );
     for (const at of times) {
-      const { bass, lead } = barNotes(this.bar, this.rng);
-      this.schedule(bass, at, this.musicGain);
-      this.schedule(lead, at, this.musicGain);
+      this.schedule(notes(this.bar, this.rng), at, this.musicGain);
       this.bar++;
     }
     this.nextBarAt = nextBarAt;
